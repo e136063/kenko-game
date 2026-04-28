@@ -1378,6 +1378,7 @@ function startExercise(ex) {
   faceLandmarks = null;
   tongueLRLastDir = 0;
   tongueLRCooldown = 0;
+  patakaMouthWasOpen = false;
   updateHUD();
 
   showScreen('game');
@@ -1714,6 +1715,9 @@ let tongueLRLastDir = 0;    // -1=left detected, 1=right detected
 let tongueLRSwitched = false;
 let tongueLRCooldown = 0;
 
+// pa-ta-ka: track open-close cycle
+let patakaMouthWasOpen = false; // whether mouth was open last frame
+
 // Per-exercise motion detector — returns true if action detected
 function checkMotion(ex) {
   if (!faceLandmarks) return false;
@@ -1750,8 +1754,17 @@ function checkMotion(ex) {
       return open > 0.35;
     case 'cheek':       // mouth closes then opens — detect open
       return open > 0.3;
-    case 'pa-ta-ka':    // rapid mouth open
-      return open > 0.28;
+    case 'pa-ta-ka': {
+      // Detect a mouth-open peak: mouth crosses 0.15 from a closed state
+      // This fires once per open action (like saying PA, TA, or KA)
+      const isOpen = open > 0.15;
+      if (isOpen && !patakaMouthWasOpen) {
+        patakaMouthWasOpen = true;  // rising edge — score!
+        return true;
+      }
+      if (!isOpen) patakaMouthWasOpen = false; // reset when mouth closes
+      return false;
+    }
 
     default:
       return open > 0.3;
@@ -1772,7 +1785,8 @@ function scoreMotionIfDetected() {
     state.score += pts;
     state.hitBeats++;
     hudScore.textContent = Math.floor(state.score);
-    motionCooldown = now + 900; // 0.9s cooldown between scores
+    // pa-ta-ka has faster syllables — shorter cooldown so each PA/TA/KA can score
+    motionCooldown = now + (ex.id === 'pa-ta-ka' ? 600 : 900);
     // Show popup
     const np = getNotePosition(canvas.width, canvas.height);
     hitPopups.push({
