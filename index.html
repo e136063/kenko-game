@@ -1424,6 +1424,9 @@ function startExercise(ex) {
   faceLandmarks = null;
   tongueLRLastDir = 0;
   tongueLRCooldown = 0;
+  swallowPhase = 'idle';
+  swallowBaselineSet = false;
+  swallowRisingStart = 0;
   updateHUD();
 
   showScreen('game');
@@ -1760,6 +1763,12 @@ let tongueLRLastDir = 0;    // -1=left detected, 1=right detected
 let tongueLRSwitched = false;
 let tongueLRCooldown = 0;
 
+// Track swallow detection — need jaw rise then fall
+let swallowChinBaseline = 0;  // baseline chin Y (normalized, 0=top, 1=bottom)
+let swallowPhase = 'idle';    // idle → rising
+let swallowBaselineSet = false;
+let swallowRisingStart = 0;   // timestamp when chin first rose (ms)
+
 // Per-exercise motion detector — returns true if action detected
 function checkMotion(ex) {
   if (!faceLandmarks) return false;
@@ -1798,8 +1807,62 @@ function checkMotion(ex) {
       return open > 0.3;
     case 'pa-ta-ka':    // rapid mouth open
       return open > 0.28;
-    case 'swallow':     // mouth stays closed, slight nod — detect closed mouth
-      return open < 0.08;
+    case 'swallow': {
+      // Detect genuine swallow: mouth closes + chin/throat moves up then returns
+      // MediaPipe Y: 0=top, 1=bottom. Chin rising = Y decreasing.
+      if (!faceLandmarks) return false;
+      const chinY = faceLandmarks[LM.chin].y;
+      const foreY = faceLandmarks[LM.forehead].y;
+      const faceH = Math.abs(chinY - foreY) || 0.25; // face height for normalization
+      const now2 = performance.now();
+
+      // Continuously update baseline ONLY when mouth is clearly open (relaxed/neutral)
+      // This prevents chin-only closed-mouth drift from accumulating
+      if (open > 0.20) {
+        if (!swallowBaselineSet) {
+          swallowChinBaseline = chinY;
+          swallowBaselineSet = true;
+        } else {
+          // Slow exponential average toward current chin position
+          swallowChinBaseline = swallowChinBaseline * 0.94 + chinY * 0.06;
+        }
+        swallowPhase = 'idle';
+        return false;
+      }
+
+      // Require baseline to be established before scoring
+      if (!swallowBaselineSet) return false;
+
+      // Chin displacement (positive = chin moved UP = swallowing action)
+      const chinRise = (swallowChinBaseline - chinY) / faceH;
+
+      if (swallowPhase === 'idle') {
+        // Require: mouth is CLOSED (open < 0.12) AND chin rises clearly (> 0.06)
+        // Threshold 0.06 is higher than before to prevent false positives
+        if (open < 0.12 && chinRise > 0.06) {
+          swallowPhase = 'rising';
+          swallowRisingStart = now2;
+        }
+      } else if (swallowPhase === 'rising') {
+        const risingDuration = now2 - swallowRisingStart;
+        if (chinRise < 0.02) {
+          // Chin returned to baseline — valid swallow only if it held for 150-1200ms
+          // (too fast = noise, too slow = not a swallow)
+          if (risingDuration >= 150 && risingDuration <= 1200) {
+            swallowPhase = 'idle';
+            swallowChinBaseline = chinY; // reset baseline after score
+            return true;
+          } else {
+            // Too fast or too slow — reset without scoring
+            swallowPhase = 'idle';
+          }
+        } else if (risingDuration > 1500) {
+          // Stuck in rising for too long — likely static position, reset
+          swallowPhase = 'idle';
+        }
+      }
+      return false;
+    }
     default:
       return open > 0.3;
   }
