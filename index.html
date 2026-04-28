@@ -1109,47 +1109,6 @@ function gameRender(ts) {
     ctx.restore();
   }
 
-  // Mic volume indicator — only shown during pa-ta-ka exercise
-  if (ex.id === 'pa-ta-ka') {
-    const barX = faceCX - faceR;
-    const barY = faceCY + faceR + 8;
-    const barW = faceR * 2;
-    const barH = 8;
-    // Scale bar: 0.1 RMS = full bar (typical speech is 0.02–0.08)
-    const barScale = 0.1;
-    const fillW = barW * Math.min(micVolume / barScale, 1);
-    const dynThresh = Math.max(micBaseline * 2.5, 0.012);
-    const threshFrac = Math.min(dynThresh / barScale, 0.95);
-    // Background track
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW, barH, 4);
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
-    ctx.fill();
-    // Volume fill — teal when above threshold, orange when below
-    if (fillW > 0) {
-      const aboveThresh = micVolume > dynThresh;
-      ctx.beginPath();
-      ctx.roundRect(barX, barY, fillW, barH, 4);
-      ctx.fillStyle = aboveThresh ? '#4ECDC4' : '#FF6B35';
-      ctx.fill();
-    }
-    // Dynamic threshold marker
-    const threshX = barX + barW * threshFrac;
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(threshX, barY - 2);
-    ctx.lineTo(threshX, barY + barH + 2);
-    ctx.stroke();
-    // Label
-    ctx.textAlign = 'center';
-    ctx.font = `500 ${Math.min(W * 0.03, 11)}px 'Noto Sans TC', sans-serif`;
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.fillText('🎤 聲音', barX + barW / 2, barY + barH + 13);
-    ctx.restore();
-  }
-
   // Instruction prompt (only when no camera — camera mode shows bubble instead)
   if (!camActive) {
     ctx.save();
@@ -1856,18 +1815,13 @@ function checkMotion(ex) {
     case 'cheek':       // mouth closes then opens — detect open
       return open > 0.3;
     case 'pa-ta-ka': {
-      // Must BOTH open mouth (rising edge) AND produce sound at same moment
-      // This prevents silent face movements from scoring, and sound-only from scoring
+      // Detect mouth open rising edge — each time mouth opens counts as one syllable
       const isOpen = open > 0.15;
-      // Dynamic threshold: volume must be clearly above ambient noise floor
-      // Uses auto-calibrated baseline so it adapts to each user's environment
-      const micThreshold = Math.max(micBaseline * 2.5, 0.012); // at least 2.5× noise, min 0.012
-      const isSpeaking = micActive ? micVolume > micThreshold : true;
-      if (isOpen && isSpeaking && !patakaMouthWasOpen) {
-        patakaMouthWasOpen = true;  // rising edge — score!
+      if (isOpen && !patakaMouthWasOpen) {
+        patakaMouthWasOpen = true;
         return true;
       }
-      if (!isOpen) patakaMouthWasOpen = false; // reset when mouth closes
+      if (!isOpen) patakaMouthWasOpen = false;
       return false;
     }
 
