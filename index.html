@@ -223,7 +223,7 @@
     background: transparent;
     z-index: 5;
     padding: 0;
-    pointer-events: auto;
+    pointer-events: none; /* canvas handles all touch events during game */
   }
 
   /* ── Result Screen ── */
@@ -1802,11 +1802,11 @@ function checkMotion(ex) {
       // Uses mouth asymmetry + head turn combined for robustness
       const asym = getMouthAsymmetry();
       const now = Date.now();
-      // Must have mouth slightly open to be doing tongue exercise
-      if (open < 0.08) return false;
+      // Mouth just needs to be not fully closed
+      if (open < 0.04) return false;
       // Threshold: asymmetry OR head turn clearly to one side
-      const goingRight = (asym >  0.06 || turnX >  0.10);
-      const goingLeft  = (asym < -0.06 || turnX < -0.10);
+      const goingRight = (asym >  0.04 || turnX >  0.07);
+      const goingLeft  = (asym < -0.04 || turnX < -0.07);
       if (now < tongueLRCooldown) return false;
       if (goingRight && tongueLRLastDir !== 1) {
         tongueLRLastDir = 1;
