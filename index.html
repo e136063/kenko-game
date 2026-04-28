@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>健口大作戰</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --font-body: 'Noto Sans TC', sans-serif;
+    --color-bg: #FFF8F0;
+    --color-primary: #FF6B35;
+    --color-primary-light: #FF8F65;
+    --color-secondary: #4ECDC4;
+    --color-secondary-dark: #2BBDB4;
+    --color-accent: #FFE66D;
+    --color-accent2: #A8E6CF;
+    --color-text: #2C2C2C;
+    --color-text-muted: #777;
+    --color-surface: #FFFFFF;
+    --color-surface2: #FFF3E8;
+    --radius-lg: 24px;
+    --radius-xl: 36px;
+    --shadow: 0 8px 32px rgba(255,107,53,0.15);
+    --shadow-btn: 0 6px 20px rgba(255,107,53,0.35);
+    --transition: 180ms cubic-bezier(0.16,1,0.3,1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    font-family: var(--font-body);
+    background: var(--color-bg);
+    color: var(--color-text);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #app {
+    width: 100vw; height: 100dvh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    touch-action: none;
+    z-index: 1;
+    background: #FFF8F0;
+  }
+
+  /* ── Screens ── */
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  .screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.96);
+  }
+
+  /* ── Title Screen ── */
+  #screen-title {
+    background: linear-gradient(160deg, #FFF3E8 0%, #FFE8D6 100%);
+    z-index: 10;
+  }
+  .title-logo {
+    width: 120px; height: 120px;
+    margin-bottom: 20px;
+  }
+  .title-name {
+    font-size: clamp(2.2rem, 8vw, 3.2rem);
+    font-weight: 900;
+    color: var(--color-primary);
+    letter-spacing: -0.02em;
+    text-align: center;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+  .title-sub {
+    font-size: 1rem;
+    color: var(--color-text-muted);
+    text-align: center;
+    margin-bottom: 40px;
+    line-height: 1.5;
+  }
+  .btn-primary {
+    background: var(--color-primary);
+    color: #fff;
+    border: none;
+    border-radius: 99px;
+    padding: 18px 48px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-family: var(--font-body);
+    cursor: pointer;
+    box-shadow: var(--shadow-btn);
+    transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+    -webkit-tap-highlight-color: transparent;
+    letter-spacing: 0.03em;
+    margin-bottom: 16px;
+  }
+  .btn-primary:active { transform: scale(0.95); box-shadow: 0 3px 10px rgba(255,107,53,0.3); }
+  .btn-secondary {
+    background: transparent;
+    color: var(--color-text-muted);
+    border: 2px solid #DDD;
+    border-radius: 99px;
+    padding: 14px 36px;
+    font-size: 1rem;
+    font-weight: 500;
+    font-family: var(--font-body);
+    cursor: pointer;
+    transition: all var(--transition);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-secondary:active { background: #F0F0F0; }
+
+  .btn-share {
+    width: 100%; max-width: 300px;
+    padding: 13px 24px;
+    border-radius: 50px;
+    border: 2px solid #4ECDC4;
+    background: transparent;
+    color: #4ECDC4;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: var(--font-body);
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    transition: background 0.15s, color 0.15s;
+  }
+  .btn-share:active { background: #4ECDC4; color: white; }
+
+  .wave-decoration {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 180px;
+    pointer-events: none;
+  }
+
+  /* ── Select Screen ── */
+  #screen-select {
+    background: var(--color-bg);
+    z-index: 10;
+    overflow-y: auto;
+    justify-content: flex-start;
+    padding-top: 48px;
+  }
+  .select-title {
+    font-size: 1.6rem;
+    font-weight: 900;
+    color: var(--color-text);
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .exercise-list {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .exercise-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.07);
+    border: 3px solid transparent;
+    transition: all var(--transition);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .exercise-card:active { transform: scale(0.97); }
+  .exercise-card.locked { opacity: 0.45; cursor: default; }
+  .exercise-card.completed { border-color: var(--color-secondary); }
+  .exercise-icon {
+    width: 56px; height: 56px;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem;
+    flex-shrink: 0;
+  }
+  .exercise-info { flex: 1; }
+  .exercise-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 3px;
+  }
+  .exercise-desc {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+  .exercise-stars {
+    display: flex; gap: 2px;
+    font-size: 1.1rem;
+  }
+
+  /* ── Game Screen ── */
+  #screen-game {
+    background: transparent;
+    z-index: 5;
+    padding: 0;
+    pointer-events: auto;
+  }
+
+  /* ── Result Screen ── */
+  #screen-result {
+    background: linear-gradient(160deg, #E8F8F7 0%, #D5F5F2 100%);
+    z-index: 10;
+    text-align: center;
+  }
+  .result-title {
+    font-size: 2.4rem;
+    font-weight: 900;
+    color: var(--color-secondary-dark);
+    margin-bottom: 8px;
+  }
+  .result-score-label {
+    font-size: 0.95rem;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+  }
+  .result-score {
+    font-size: 4rem;
+    font-weight: 900;
+    color: var(--color-primary);
+    line-height: 1;
+    margin-bottom: 24px;
+  }
+  .result-stars {
+    font-size: 3rem;
+    margin-bottom: 20px;
+    letter-spacing: 8px;
+  }
+  .result-msg {
+    font-size: 1.05rem;
+    color: var(--color-text);
+    margin-bottom: 36px;
+    line-height: 1.6;
+    max-width: 300px;
+  }
+  .result-btns {
+    display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 300px;
+  }
+
+  /* ── Tutorial overlay ── */
+  #screen-tutorial {
+    background: rgba(0,0,0,0.6);
+    z-index: 20;
+    backdrop-filter: blur(8px);
+  }
+  .tutorial-box {
+    background: var(--color-surface);
+    border-radius: var(--radius-xl);
+    padding: 32px 28px;
+    max-width: 340px;
+    width: 100%;
+    text-align: center;
+  }
+  .tutorial-icon { font-size: 4rem; margin-bottom: 12px; }
+  .tutorial-heading {
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: var(--color-primary);
+    margin-bottom: 10px;
+  }
+  .tutorial-body {
+    font-size: 1rem;
+    color: var(--color-text);
+    line-height: 1.7;
+    margin-bottom: 24px;
+  }
+
+  /* ── HUD ── */
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px 0;
+    z-index: 15;
+    pointer-events: none;
+  }
+  #hud.hidden { display: none; }
+  .hud-pill {
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(8px);
+    border-radius: 99px;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    pointer-events: auto;
+  }
+  .hud-label {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+  .hud-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--color-text);
+  }
+  #btn-pause {
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(8px);
+    border-radius: 99px;
+    padding: 8px 14px;
+    font-size: 1.2rem;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── Pause overlay ── */
+  #screen-pause {
+    background: rgba(0,0,0,0.55);
+    z-index: 18;
+    backdrop-filter: blur(10px);
+  }
+  .pause-box {
+    background: var(--color-surface);
+    border-radius: var(--radius-xl);
+    padding: 36px 28px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+  }
+  .pause-title {
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: var(--color-primary);
+    margin-bottom: 24px;
+  }
+  .pause-btns { display: flex; flex-direction: column; gap: 12px; }
+
+
+
+
+
+  /* ── Ripple tap effect ── */
+  .tap-ripple {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,107,53,0.35);
+    transform: scale(0);
+    animation: ripple 0.45s ease-out forwards;
+    pointer-events: none;
+    z-index: 30;
+  }
+  @keyframes ripple {
+    to { transform: scale(3.5); opacity: 0; }
+  }
+
+  /* ── Streak popup ── */
+  .streak-popup {
+    position: absolute;
+    font-size: 1.1rem;
+    font-weight: 900;
+    color: var(--color-primary);
+    text-shadow: 0 2px 8px rgba(255,107,53,0.3);
+    pointer-events: none;
+    z-index: 25;
+    animation: floatUp 0.8s ease-out forwards;
+  }
+  @keyframes floatUp {
+    0%  { opacity: 1; transform: translateY(0) scale(1); }
+    100%{ opacity: 0; transform: translateY(-60px) scale(1.2); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Canvas background for game -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Camera video (hidden, drawn onto canvas) -->
+  <video id="cam-video" autoplay playsinline muted webkit-playsinline style="position:fixed;top:-9999px;left:-9999px;width:320px;height:240px;visibility:hidden;"></video>
+
+
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-pill">
+      <span class="hud-label">得分</span>
+      <span class="hud-value" id="hud-score">0</span>
+    </div>
+    <button id="btn-pause">⏸</button>
+
+  </div>
+
+  <!-- Title Screen -->
+  <div class="screen" id="screen-title">
+    <svg class="title-logo" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="健口大作戰 Logo">
+      <!-- Face base -->
+      <circle cx="60" cy="60" r="52" fill="#FFE0C8"/>
+      <circle cx="60" cy="60" r="52" fill="url(#faceGrad)" opacity="0.6"/>
+      <!-- Cheeks -->
+      <ellipse cx="32" cy="72" rx="14" ry="10" fill="#FFB5A7" opacity="0.7"/>
+      <ellipse cx="88" cy="72" rx="14" ry="10" fill="#FFB5A7" opacity="0.7"/>
+      <!-- Eyes -->
+      <ellipse cx="44" cy="50" rx="6" ry="7" fill="#2C2C2C"/>
+      <ellipse cx="76" cy="50" rx="6" ry="7" fill="#2C2C2C"/>
+      <circle cx="46" cy="48" r="2" fill="white"/>
+      <circle cx="78" cy="48" r="2" fill="white"/>
+      <!-- Mouth open (exercise) -->
+      <path d="M42 76 Q60 95 78 76" stroke="#2C2C2C" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+      <path d="M44 78 Q60 92 76 78 Q68 86 52 86 Z" fill="#E05C5C" opacity="0.7"/>
+      <!-- Tongue -->
+      <ellipse cx="60" cy="85" rx="10" ry="7" fill="#FF8FA3"/>
+      <!-- Sparkles -->
+      <g fill="#FF6B35">
+        <circle cx="18" cy="30" r="3"/>
+        <circle cx="102" cy="25" r="4"/>
+        <circle cx="108" cy="80" r="2.5"/>
+        <circle cx="12" cy="85" r="2"/>
+      </g>
+      <defs>
+        <radialGradient id="faceGrad" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stop-color="#FFF0E8"/>
+          <stop offset="100%" stop-color="#FFCBA4"/>
+        </radialGradient>
+      </defs>
+    </svg>
+    <div class="title-name">健口大作戰</div>
+    <div class="title-sub">跟著節拍做健口操<br>預防吞嚥困難，天天練習！</div>
+    <button class="btn-primary" id="btn-start">開始練習 ▶</button>
+    <button class="btn-secondary" id="btn-howto">如何遊戲？</button>
+    <button class="btn-share" id="btn-share">📎 分享給朋友</button>
+    <svg class="wave-decoration" viewBox="0 0 390 180" preserveAspectRatio="none">
+      <path d="M0 80 Q97 20 195 80 Q293 140 390 80 L390 180 L0 180 Z" fill="#FF6B35" opacity="0.12"/>
+      <path d="M0 110 Q97 50 195 110 Q293 170 390 110 L390 180 L0 180 Z" fill="#4ECDC4" opacity="0.10"/>
+    </svg>
+  </div>
+
+  <!-- Tutorial Screen -->
+  <div class="screen hidden" id="screen-tutorial">
+    <div class="tutorial-box">
+      <div class="tutorial-icon">🎵</div>
+      <div class="tutorial-heading">遊戲說明</div>
+      <div class="tutorial-body">
+        畫面上的大臉會示範健口操動作<br><br>
+        看到<strong>發光圓圈</strong>出現時<br>
+        配合節拍<strong>點一下螢幕</strong>！<br><br>
+        完美點擊可獲得連擊加分<br>
+        <strong>加油！嘴巴動起來！</strong>
+      </div>
+      <button class="btn-primary" id="btn-tutorial-ok">我知道了！</button>
+    </div>
+  </div>
+
+  <!-- Select Screen -->
+  <div class="screen hidden" id="screen-select">
+    <div class="select-title">選擇健口操</div>
+    <div class="exercise-list" id="exercise-list">
+      <!-- cards injected by JS -->
+    </div>
+    <button class="btn-secondary" id="btn-back-select">← 返回</button>
+  </div>
+
+  <!-- Game Screen (canvas renders here) -->
+  <div class="screen hidden" id="screen-game"></div>
+
+  <!-- Pause Screen -->
+  <div class="screen hidden" id="screen-pause">
+    <div class="pause-box">
+      <div class="pause-title">⏸ 暫停</div>
+      <div class="pause-btns">
+        <button class="btn-primary" id="btn-resume">繼續練習</button>
+        <button class="btn-secondary" id="btn-quit">結束練習</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result Screen -->
+  <div class="screen hidden" id="screen-result">
+    <div class="result-title" id="result-title">太棒了！</div>
+    <div class="result-score-label">本次得分</div>
+    <div class="result-score" id="result-score">0</div>
+    <div class="result-stars" id="result-stars">⭐⭐⭐</div>
+    <div class="result-msg" id="result-msg">嘴巴運動得很好！<br>繼續每天練習喔！</div>
+    <div class="result-btns">
+      <button class="btn-primary" id="btn-replay">再玩一次 🔄</button>
+      <button class="btn-secondary" id="btn-back-result">選擇其他動作</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  健口大作戰 — Rhythm Oral Exercise Game
+//  Designed for elderly care & caregiver use in Taiwan LTC
+// ══════════════════════════════════════════════════════════
+
+// ── Constants ──────────────────────────────────────────────
+const EXERCISES = [
+  {
+    id: 'tongue-fb',
+    name: '舌頭前後運動',
+    desc: '伸舌頭、再縮回來',
+    icon: '👅',
+    color: '#FF6B35',
+    bg: '#FFF0E8',
+    bpm: 52,
+    totalBeats: 20,
+    instruction: '舌頭伸出去→縮回來',
+    phases: ['伸出舌頭', '縮回來'],
+    faceStyle: 'tongue-fb',
+  },
+  {
+    id: 'tongue-lr',
+    name: '舌頭左右運動',
+    desc: '舌頭向左、再向右',
+    icon: '↔️',
+    color: '#4ECDC4',
+    bg: '#E8FAFA',
+    bpm: 56,
+    totalBeats: 20,
+    instruction: '舌頭→左邊→右邊',
+    phases: ['舌頭向左', '舌頭向右'],
+    faceStyle: 'tongue-lr',
+  },
+  {
+    id: 'lip',
+    name: '嘴唇運動',
+    desc: '嘟嘴、然後張開嘴',
+    icon: '💋',
+    color: '#E05C8A',
+    bg: '#FEE8F0',
+    bpm: 50,
+    totalBeats: 20,
+    instruction: '嘟嘴→張口',
+    phases: ['嘟嘴', '張口'],
+    faceStyle: 'lip',
+  },
+
+  {
+    id: 'pa-ta-ka',
+    name: '發音練習 PA·TA·KA',
+    desc: '清楚說出 啪、他、卡',
+    icon: '🗣️',
+    color: '#F7B731',
+    bg: '#FFFBE8',
+    bpm: 58,
+    totalBeats: 24,
+    instruction: '啪→他→卡',
+    phases: ['啪 (PA)', '他 (TA)', '卡 (KA)'],
+    faceStyle: 'speak',
+  },
+  {
+    id: 'swallow',
+    name: '吞嚥練習',
+    desc: '深呼吸、閉嘴、吞口水',
+    icon: '🫗',
+    color: '#26C485',
+    bg: '#E8FBF4',
+    bpm: 40,
+    totalBeats: 12,
+    instruction: '深呼吸→閉嘴吞嚥',
+    phases: ['深呼吸', '吞嚥'],
+    faceStyle: 'swallow',
+  },
+];
+
+const RATINGS = [
+  { label: '完美！', min: 0.85, stars: 3, msg: '真的很棒！口腔肌肉越練越靈活，繼續保持！' },
+  { label: '很好！', min: 0.65, stars: 2, msg: '做得不錯！每天練習，吞嚥更安全健康！' },
+  { label: '繼續加油！', min: 0, stars: 1, msg: '沒關係，多練幾次就會更順手了！加油！' },
+];
+
+const TIMING = {
+  perfect: 160,  // ms window for PERFECT
+  good: 260,     // ms window for GOOD
+  miss: 300,     // miss after this ms
+};
+const SCORE_PERFECT = 100;
+const SCORE_GOOD = 60;
+
+// ── State ──────────────────────────────────────────────────
+let state = {
+  screen: 'title',
+  exercise: null,
+  score: 0,
+  combo: 0,
+  maxCombo: 0,
+  totalBeats: 0,
+  hitBeats: 0,
+  perfectBeats: 0,
+  gameRunning: false,
+  paused: false,
+  firstPlay: true,
+};
+
+// ── DOM refs ───────────────────────────────────────────────
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const hud = document.getElementById('hud');
+const hudScore = document.getElementById('hud-score');
+
+const screens = {
+  title: document.getElementById('screen-title'),
+  tutorial: document.getElementById('screen-tutorial'),
+  select: document.getElementById('screen-select'),
+  game: document.getElementById('screen-game'),
+  pause: document.getElementById('screen-pause'),
+  result: document.getElementById('screen-result'),
+};
+
+// ── Screen management ──────────────────────────────────────
+function showScreen(name) {
+  Object.entries(screens).forEach(([k, el]) => {
+    if (k === name) el.classList.remove('hidden');
+    else el.classList.add('hidden');
+  });
+  if (name === 'game') {
+    hud.classList.remove('hidden');
+    canvas.style.zIndex = '4'; // above bg screens, below HUD/pause during game
+  } else {
+    hud.classList.add('hidden');
+    canvas.style.zIndex = '1'; // behind screens when not playing
+  }
+  state.screen = name;
+}
+
+// ── Exercise select build ──────────────────────────────────
+function buildExerciseList() {
+  const list = document.getElementById('exercise-list');
+  list.innerHTML = '';
+  EXERCISES.forEach((ex, i) => {
+    const card = document.createElement('div');
+    card.className = 'exercise-card';
+    card.innerHTML = `
+      <div class="exercise-icon" style="background:${ex.bg}">
+        <span>${ex.icon}</span>
+      </div>
+      <div class="exercise-info">
+        <div class="exercise-name" style="color:${ex.color}">${ex.name}</div>
+        <div class="exercise-desc">${ex.desc}</div>
+      </div>
+      <div class="exercise-stars">
+        ${getStarsForExercise(ex.id)}
+      </div>
+    `;
+    card.addEventListener('click', () => startExercise(ex));
+    card.addEventListener('touchend', e => { e.preventDefault(); startExercise(ex); });
+    list.appendChild(card);
+  });
+}
+
+// In-memory star storage (no localStorage needed)
+const starMemory = {};
+
+function getStarsForExercise(id) {
+  const s = starMemory[id] || 0;
+  let out = '';
+  for (let i = 0; i < 3; i++) out += i < s ? '⭐' : '☆';
+  return out;
+}
+function saveStars(id, stars) {
+  starMemory[id] = stars;
+}
+
+// ── Audio ──────────────────────────────────────────────────
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function playTone(freq, dur, type = 'sine', vol = 0.25) {
+  ensureAudio();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + dur);
+}
+function playBeat() { playTone(220, 0.08, 'sine', 0.18); }
+function playPerfect() {
+  playTone(660, 0.12, 'sine', 0.3);
+  setTimeout(() => playTone(880, 0.15, 'sine', 0.2), 60);
+}
+function playGood() { playTone(440, 0.1, 'triangle', 0.22); }
+function playMiss() { playTone(120, 0.18, 'sawtooth', 0.12); }
+function playCombo(n) {
+  const freq = 400 + n * 30;
+  playTone(freq, 0.14, 'sine', 0.28);
+}
+function playSuccess() {
+  [523, 659, 784, 1047].forEach((f, i) =>
+    setTimeout(() => playTone(f, 0.22, 'sine', 0.28), i * 80)
+  );
+}
+
+// ── Game Engine ────────────────────────────────────────────
+let beatInterval = null;
+let noteQueue = [];
+let particles = [];
+let faceAnim = { phase: 0, t: 0, beatPhase: 0 };
+let bgPulse = { scale: 1 };
+let currentBeatIndex = 0;
+let countdownVal = 0;
+let showingCountdown = false;
+let gameStartTime = 0;
+let beatCount = 0;
+
+class Note {
+  constructor(spawnTime, beatIndex, phaseIndex, ex) {
+    this.spawnTime = spawnTime;
+    this.hitTime = spawnTime + 700; // notes travel for 700ms
+    this.beatIndex = beatIndex;
+    this.phaseIndex = phaseIndex;
+    this.ex = ex;
+    this.hit = false;
+    this.missed = false;
+    this.scale = 1;
+    this.alpha = 1;
+    this.ripple = 0;
+    this.color = ex.color;
+  }
+
+  update(now) {
+    const age = now - this.spawnTime;
+    const travel = now - this.hitTime;
+    // Scale: grow as approaches
+    const progress = Math.min(age / 700, 1);
+    this.scale = 0.3 + 0.7 * progress;
+    this.alpha = progress < 0.2 ? progress / 0.2 : 1;
+    if (this.hit) {
+      this.ripple += 0.12;
+      this.alpha = Math.max(0, 1 - this.ripple / 1.2);
+    }
+    if (!this.hit && !this.missed && travel > TIMING.miss) {
+      this.missed = true;
+      onMiss();
+    }
+  }
+
+  isDead(now) {
+    if (this.hit) return this.ripple > 1.4;
+    return now - this.hitTime > TIMING.miss + 200;
+  }
+}
+
+class Particle {
+  constructor(x, y, vx, vy, color, size, life) {
+    this.x = x; this.y = y;
+    this.vx = vx; this.vy = vy;
+    this.color = color;
+    this.size = size;
+    this.life = life;
+    this.maxLife = life;
+  }
+  update(dt) {
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.vy += 400 * dt;
+    this.life -= dt;
+  }
+  draw(ctx) {
+    const alpha = Math.max(0, this.life / this.maxLife);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = this.color;
+    const s = this.size * alpha;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  isDead() { return this.life <= 0; }
+}
+
+function spawnBurst(x, y, color, count = 14) {
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.3;
+    const speed = 120 + Math.random() * 180;
+    particles.push(new Particle(
+      x, y,
+      Math.cos(angle) * speed, Math.sin(angle) * speed - 80,
+      color, 4 + Math.random() * 5, 0.5 + Math.random() * 0.4
+    ));
+  }
+}
+
+// ── Hit result popup ───────────────────────────────────────
+let hitPopups = [];
+function showHitPopup(text, x, y, color) {
+  hitPopups.push({ text, x, y, color, t: 0, maxT: 0.7 });
+}
+
+// ── Face drawing ───────────────────────────────────────────
+function drawFace(ctx, cx, cy, r, ex, beatPhase) {
+  const style = ex.faceStyle;
+  const p = beatPhase; // 0..1 between beats, used for animation
+
+  // Shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.12)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 8;
+
+  // Face
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFCFAE';
+  ctx.fill();
+  ctx.restore();
+
+  // Gradient overlay
+  const grad = ctx.createRadialGradient(cx - r*0.25, cy - r*0.3, 0, cx, cy, r);
+  grad.addColorStop(0, 'rgba(255,255,255,0.4)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.0)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Cheeks
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = '#FF9BA3';
+  ctx.beginPath(); ctx.ellipse(cx - r*0.48, cy + r*0.18, r*0.22, r*0.14, -0.2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + r*0.48, cy + r*0.18, r*0.22, r*0.14,  0.2, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Eyes
+  const eyeY = cy - r * 0.12;
+  const eyeOffX = r * 0.33;
+
+  function drawEye(ex, ey, blink) {
+    const eyeR = r * 0.11;
+    if (blink) {
+      ctx.beginPath();
+      ctx.moveTo(ex - eyeR, ey);
+      ctx.lineTo(ex + eyeR, ey);
+      ctx.strokeStyle = '#2C2C2C'; ctx.lineWidth = 3; ctx.stroke();
+      return;
+    }
+    ctx.fillStyle = '#2C2C2C';
+    ctx.beginPath(); ctx.ellipse(ex, ey, eyeR, eyeR*1.1, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.beginPath(); ctx.arc(ex + eyeR*0.35, ey - eyeR*0.35, eyeR*0.32, 0, Math.PI*2); ctx.fill();
+  }
+  const blink = (Date.now() % 4000 < 120);
+  drawEye(cx - eyeOffX, eyeY, blink);
+  drawEye(cx + eyeOffX, eyeY, blink);
+
+  // Eyebrows
+  ctx.strokeStyle = '#5A3820'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - eyeOffX - r*0.12, eyeY - r*0.18);
+  ctx.lineTo(cx - eyeOffX + r*0.12, eyeY - r*0.16);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + eyeOffX - r*0.12, eyeY - r*0.16);
+  ctx.lineTo(cx + eyeOffX + r*0.12, eyeY - r*0.18);
+  ctx.stroke();
+
+  // Mouth area — based on style and beat phase
+  const mouthY = cy + r * 0.28;
+  const mouthW = r * 0.5;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+
+  if (style === 'tongue-fb') {
+    // Phase 0 = tongue out, phase 1 = tongue in
+    const isOut = faceAnim.phase === 0;
+    const trans = Math.sin(p * Math.PI);
+    // Open mouth
+    ctx.fillStyle = '#C0392B';
+    ctx.beginPath();
+    ctx.ellipse(cx, mouthY, mouthW * (0.7 + trans * 0.3), r * 0.14, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Teeth
+    ctx.fillStyle = '#FFF';
+    ctx.fillRect(cx - mouthW*0.55, mouthY - r*0.08, mouthW*1.1, r*0.1);
+    // Tongue
+    const tongueExt = isOut ? (0.5 + trans * 0.5) : (0.5 - trans * 0.5);
+    ctx.fillStyle = '#FF8FA3';
+    ctx.beginPath();
+    ctx.ellipse(cx, mouthY + r*0.08 + tongueExt * r*0.35, r*0.22, r*0.18, 0, 0, Math.PI*2);
+    ctx.fill();
+
+  } else if (style === 'tongue-lr') {
+    const dir = faceAnim.phase === 0 ? -1 : 1; // -1=left, 1=right
+    const shift = dir * (0.3 + Math.sin(p * Math.PI) * 0.25) * r;
+    ctx.fillStyle = '#C0392B';
+    ctx.beginPath();
+    ctx.ellipse(cx, mouthY, mouthW * 0.85, r*0.13, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#FFF';
+    ctx.fillRect(cx - mouthW*0.7, mouthY - r*0.07, mouthW*1.4, r*0.08);
+    // Tongue poking to side
+    ctx.fillStyle = '#FF8FA3';
+    ctx.beginPath();
+    ctx.arc(cx + shift, mouthY + r*0.02, r * 0.16, 0, Math.PI*2);
+    ctx.fill();
+
+  } else if (style === 'lip') {
+    const pout = faceAnim.phase === 0; // phase 0 = pout, phase 1 = open
+    if (pout) {
+      // Pout /嘟嘴
+      const pw = 0.25 + Math.sin(p * Math.PI) * 0.08;
+      ctx.fillStyle = '#E05C8A';
+      ctx.beginPath();
+      ctx.arc(cx, mouthY - r*0.05, r * pw, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = '#B03060'; ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      // Open
+      ctx.fillStyle = '#C0392B';
+      ctx.beginPath();
+      ctx.ellipse(cx, mouthY, mouthW * 0.8, r*0.2, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#FFF';
+      ctx.fillRect(cx - mouthW*0.6, mouthY - r*0.12, mouthW*1.2, r*0.12);
+    }
+
+  } else if (style === 'cheek') {
+    const puff = faceAnim.phase === 0;
+    if (puff) {
+      // Puffed cheeks
+      const inflation = 0.7 + Math.sin(p * Math.PI) * 0.3;
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = '#FFB5A7';
+      ctx.beginPath(); ctx.ellipse(cx - r*0.55, cy + r*0.12, r*0.32*inflation, r*0.22*inflation, -0.15, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + r*0.55, cy + r*0.12, r*0.32*inflation, r*0.22*inflation,  0.15, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#C0392B';
+      ctx.beginPath();
+      ctx.ellipse(cx, mouthY, r*0.12, r*0.12, 0, 0, Math.PI*2);
+      ctx.fill();
+    } else {
+      // Blow out
+      ctx.fillStyle = '#5B9EC9';
+      ctx.beginPath();
+      ctx.ellipse(cx, mouthY - r*0.05, r*0.12, r*0.1, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Wind lines
+      for (let i = 0; i < 3; i++) {
+        const wy = mouthY - r*0.02 + (i-1)*r*0.07;
+        ctx.strokeStyle = `rgba(91,158,201,${0.7-i*0.15})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + r*0.15, wy);
+        ctx.lineTo(cx + r*(0.35 + i*0.1), wy);
+        ctx.stroke();
+      }
+    }
+
+  } else if (style === 'speak') {
+    const phaseLabels = ['啪', '他', '卡'];
+    const ph = faceAnim.phase % 3;
+    const openAmt = 0.15 + Math.sin(p * Math.PI) * 0.18;
+    ctx.fillStyle = '#C0392B';
+    ctx.beginPath();
+    ctx.ellipse(cx, mouthY, mouthW * 0.75, r * openAmt, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#FFF';
+    ctx.font = `bold ${r*0.22}px 'Noto Sans TC', sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(phaseLabels[ph], cx, mouthY - r*0.8);
+
+  } else if (style === 'swallow') {
+    const breathe = faceAnim.phase === 0;
+    if (breathe) {
+      const scale2 = 1 + Math.sin(p * Math.PI) * 0.05;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(scale2, scale2);
+      ctx.translate(-cx, -cy);
+      ctx.fillStyle = '#2C2C2C';
+      ctx.beginPath();
+      ctx.arc(cx - eyeOffX, eyeY, r*0.11, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + eyeOffX, eyeY, r*0.11, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = '#5A3820'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx, mouthY - r*0.05, mouthW*0.45, 0.15, Math.PI - 0.15);
+      ctx.stroke();
+    } else {
+      // Swallow — closed mouth, throat motion
+      ctx.strokeStyle = '#5A3820'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - mouthW*0.4, mouthY);
+      ctx.lineTo(cx + mouthW*0.4, mouthY);
+      ctx.stroke();
+      const bobY = Math.sin(p * Math.PI * 2) * r * 0.06;
+      ctx.fillStyle = '#FFCFAE';
+      ctx.strokeStyle = '#E8956040';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy + r + bobY, r*0.12, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // Beat pulse indicator (outer ring) — hidden when camera active to avoid overlap
+  if (!camActive) {
+    const pulseAlpha = Math.max(0, 0.5 - p * 0.5);
+    ctx.save();
+    ctx.strokeStyle = ex.color;
+    ctx.lineWidth = 3;
+    ctx.globalAlpha = pulseAlpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 12 + (1 - p) * 8, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+}
+
+// ── Note zone ─────────────────────────────────────────────
+function getNotePosition(W, H) {
+  // Bottom center — tap zone
+  return { x: W / 2, y: H * 0.82 };
+}
+
+// ── Game rendering ─────────────────────────────────────────
+let lastTimestamp = 0;
+function gameRender(ts) {
+  if (!state.gameRunning) return;
+  const dt = Math.min((ts - lastTimestamp) / 1000, 0.05);
+  lastTimestamp = ts;
+
+  // Keep camera video playing (iOS Safari may pause it in background)
+  if (camActive && camVideo && camVideo.paused) {
+    camVideo.play().catch(() => {});
+  }
+
+  // Face detection every 4 frames
+  faceFrameCount++;
+  if (faceFrameCount % 4 === 0) detectFaceFrame();
+  scoreMotionIfDetected();
+
+  const W = canvas.width;
+  const H = canvas.height;
+  const ex = state.exercise;
+  const now = Date.now();
+  const t = now / 1000;
+
+  // Background
+  if (camActive && camVideo && camVideo.readyState >= 2) {
+    const vw = camVideo.videoWidth  || 320;
+    const vh = camVideo.videoHeight || 320;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale;
+    const dh = vh * scale;
+    const dx = (W - dw) / 2;
+    const dy = (H - dh) / 2;
+    ctx.save();
+    ctx.translate(W / 2, 0);
+    ctx.scale(-1, 1);
+    ctx.translate(-W / 2, 0);
+    ctx.drawImage(camVideo, dx, dy, dw, dh);
+    ctx.restore();
+    // Dark gradient overlay top/bottom
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0,    'rgba(0,0,0,0.32)');
+    grad.addColorStop(0.22, 'rgba(0,0,0,0)');
+    grad.addColorStop(0.78, 'rgba(0,0,0,0)');
+    grad.addColorStop(1,    'rgba(0,0,0,0.22)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = ex.bg;
+    ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 3; i++) {
+      const r = W * (0.4 + i * 0.15);
+      ctx.globalAlpha = 0.04 + i * 0.02;
+      ctx.fillStyle = ex.color;
+      ctx.beginPath();
+      ctx.arc(W/2 + Math.sin(t*0.3+i)*W*0.05, H*0.4 + Math.cos(t*0.2+i)*H*0.05, r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Beat phase
+  const beatMs = 60000 / ex.bpm;
+  const elapsed = now - gameStartTime;
+  const beatT = (elapsed % beatMs) / beatMs;
+  faceAnim.beatPhase = beatT;
+
+  // Phase label — top center
+  const phaseLabel = ex.phases[faceAnim.phase % ex.phases.length];
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `700 ${Math.min(W * 0.065, 26)}px 'Noto Sans TC', sans-serif`;
+  ctx.fillStyle = camActive ? 'white' : ex.color;
+  ctx.shadowColor = camActive ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
+  ctx.shadowBlur = 8;
+  ctx.globalAlpha = 0.95;
+  ctx.fillText(`▶ ${phaseLabel}`, W / 2, H * 0.13);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // Draw face — bottom-left corner as guide character when camera active
+  const faceR  = camActive ? Math.min(W, H) * 0.14 : Math.min(W, H) * 0.24;
+  const faceCX = camActive ? W * 0.22  : W / 2;
+  const faceCY = camActive ? H * 0.72  : H * 0.40;
+  drawFace(ctx, faceCX, faceCY, faceR, ex, beatT);
+
+  // Face bubble label when camera active
+  if (camActive) {
+    // Speech bubble background
+    const bubbleW = Math.min(W * 0.38, 130);
+    const bubbleH = 28;
+    const bubbleX = faceCX + faceR + 8;
+    const bubbleY = faceCY - bubbleH / 2;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.roundRect(bubbleX, bubbleY, bubbleW, bubbleH, 10);
+    ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.font = `600 ${Math.min(W * 0.038, 14)}px 'Noto Sans TC', sans-serif`;
+    ctx.fillStyle = ex.color;
+    ctx.fillText(ex.instruction, bubbleX + bubbleW / 2, faceCY + 1);
+    ctx.restore();
+  }
+
+  // Instruction prompt (only when no camera — camera mode shows bubble instead)
+  if (!camActive) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = `500 ${Math.min(W * 0.045, 18)}px 'Noto Sans TC', sans-serif`;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillText(ex.instruction, W / 2, H * 0.635);
+    ctx.restore();
+  }
+
+  // Note zone ring (target) — keep centered
+  const np = getNotePosition(W, H);
+  const ringPulse = 0.9 + Math.sin(t * 6) * 0.05;
+  ctx.save();
+  // Outer ring
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(np.x, np.y, 52 * ringPulse, 0, Math.PI*2);
+  ctx.stroke();
+  // Inner ring colored
+  ctx.strokeStyle = ex.color + '80';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(np.x, np.y, 36, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.fillStyle = ex.color + '18';
+  ctx.beginPath();
+  ctx.arc(np.x, np.y, 36, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // (tap prompt removed)
+
+  // Update & draw notes
+  noteQueue = noteQueue.filter(note => {
+    note.update(now);
+    if (!note.isDead(now)) {
+      drawNote(note, np, W, H);
+      return true;
+    }
+    return false;
+  });
+
+  // Particles
+  particles = particles.filter(p => { p.update(dt); if (!p.isDead()) { p.draw(ctx); return true; } return false; });
+
+  // Hit popups
+  hitPopups = hitPopups.filter(pop => {
+    pop.t += dt;
+    if (pop.t < pop.maxT) {
+      const prog = pop.t / pop.maxT;
+      ctx.save();
+      ctx.globalAlpha = 1 - prog;
+      ctx.textAlign = 'center';
+      ctx.font = `900 ${Math.min(W * 0.075, 30)}px 'Noto Sans TC', sans-serif`;
+      ctx.fillStyle = pop.color;
+      ctx.fillText(pop.text, pop.x, pop.y - prog * 55);
+      ctx.restore();
+      return true;
+    }
+    return false;
+  });
+
+  // Countdown
+  if (showingCountdown) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `900 ${W * 0.25}px 'Noto Sans TC', sans-serif`;
+    ctx.fillStyle = ex.color;
+    ctx.globalAlpha = 0.85;
+    ctx.fillText(countdownVal > 0 ? countdownVal : '開始！', W/2, H/2);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  if (!state.paused) requestAnimationFrame(gameRender);
+}
+
+function drawNote(note, np, W, H) {
+  const now = Date.now();
+  const progress = Math.min((now - note.spawnTime) / 700, 1);
+  // Notes fall from above toward tap zone
+  const startY = H * 0.58;
+  const endY = np.y;
+  const x = np.x;
+  const y = startY + (endY - startY) * progress;
+
+  const r = 28 * note.scale;
+  ctx.save();
+  ctx.globalAlpha = note.alpha;
+
+  // Glow via shadow (no gradient object needed)
+  ctx.shadowColor = note.color;
+  ctx.shadowBlur = 18;
+
+  // Note circle
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = note.color;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Ripple if hit
+  if (note.hit) {
+    ctx.strokeStyle = note.color;
+    ctx.lineWidth = 3 * (1 - note.ripple);
+    ctx.globalAlpha = note.alpha * 0.8;
+    ctx.beginPath();
+    ctx.arc(x, np.y, r + note.ripple * 40, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// ── Rhythm beat scheduler ──────────────────────────────────
+let schedulerTimer = null;
+let countdownTimer = null;
+let nextBeatTime = 0;
+let globalBeatIndex = 0;
+let beatPhaseIndex = 0;
+
+function schedulerTick() {
+  if (!state.gameRunning || state.paused) return;
+  const now = Date.now();
+  const ex = state.exercise;
+  const beatMs = 60000 / ex.bpm;
+
+  while (nextBeatTime < now + 800) {
+    if (globalBeatIndex >= ex.totalBeats) {
+      // End game
+      setTimeout(endGame, 1000);
+      clearInterval(schedulerTimer);
+      return;
+    }
+    // Queue note
+    noteQueue.push(new Note(nextBeatTime - 700, globalBeatIndex, beatPhaseIndex, ex));
+    // Update face phase on beat
+    const capturedBeat = nextBeatTime;
+    const capturedPhase = beatPhaseIndex;
+    const delay = nextBeatTime - now;
+    setTimeout(() => {
+      if (state.gameRunning) {
+        faceAnim.phase = capturedPhase;
+        playBeat();
+        state.totalBeats++;
+      }
+    }, Math.max(0, delay));
+
+    globalBeatIndex++;
+    beatPhaseIndex = (beatPhaseIndex + 1) % ex.phases.length;
+    nextBeatTime += beatMs;
+  }
+}
+
+// ── Hit detection ──────────────────────────────────────────
+function onTap(x, y) {
+  if (!state.gameRunning || state.paused || showingCountdown) return;
+  ensureAudio();
+
+  const now = Date.now();
+  const np = getNotePosition(canvas.width, canvas.height);
+
+  // Ripple visual
+  addRipple(x, y, state.exercise.color);
+
+  // Find nearest note to hit
+  let bestNote = null;
+  let bestDiff = Infinity;
+  for (const note of noteQueue) {
+    if (note.hit || note.missed) continue;
+    const diff = Math.abs(now - note.hitTime);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestNote = note;
+    }
+  }
+
+  if (bestNote && bestDiff <= TIMING.good) {
+    bestNote.hit = true;
+    state.hitBeats++;
+    if (bestDiff <= TIMING.perfect) {
+      state.perfectBeats++;
+      state.score += SCORE_PERFECT * (1 + Math.floor(state.combo / 5) * 0.5);
+      state.combo++;
+      if (state.combo > state.maxCombo) state.maxCombo = state.combo;
+      if (state.combo >= 5) { playCombo(state.combo); } else { playPerfect(); }
+      showHitPopup('完美！', np.x, np.y, '#FF6B35');
+      spawnBurst(np.x, np.y, state.exercise.color, 16);
+    } else {
+      state.score += SCORE_GOOD * (1 + Math.floor(state.combo / 5) * 0.3);
+      state.combo++;
+      if (state.combo > state.maxCombo) state.maxCombo = state.combo;
+      playGood();
+      showHitPopup('Good！', np.x, np.y, '#4ECDC4');
+      spawnBurst(np.x, np.y, '#4ECDC4', 8);
+    }
+    updateHUD();
+  } else {
+    // Extra tap — no penalty but no points
+  }
+}
+
+function onMiss() {
+  if (!state.gameRunning) return;
+  state.combo = 0;
+  playMiss();
+  updateHUD();
+}
+
+function updateHUD() {
+  hudScore.textContent = Math.floor(state.score);
+}
+
+function addRipple(x, y, color) {
+  const app = document.getElementById('app');
+  const rip = document.createElement('div');
+  rip.className = 'tap-ripple';
+  const size = 60;
+  rip.style.cssText = `
+    left:${x - size/2}px; top:${y - size/2}px;
+    width:${size}px; height:${size}px;
+    background:${color}55;
+  `;
+  app.appendChild(rip);
+  setTimeout(() => rip.remove(), 500);
+}
+
+// ── Resize canvas ──────────────────────────────────────────
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ── Start exercise ───────────────────────────────────────────────────
+function startExercise(ex) {
+  ensureAudio();
+
+  // Clear any lingering timers to prevent overlapping runs
+  clearInterval(schedulerTimer); schedulerTimer = null;
+  clearInterval(countdownTimer); countdownTimer = null;
+
+  state.exercise = ex;
+  state.score = 0;
+  state.combo = 0;
+  state.maxCombo = 0;
+  state.totalBeats = 0;
+  state.hitBeats = 0;
+  state.perfectBeats = 0;
+  state.gameRunning = false;
+  state.paused = false;
+  noteQueue = [];
+  particles = [];
+  hitPopups = [];
+  globalBeatIndex = 0;
+  beatPhaseIndex = 0;
+  faceAnim.phase = 0;
+  faceFrameCount = 0;
+  motionCooldown = 0;
+  faceLandmarks = null;
+  updateHUD();
+
+  showScreen('game');
+
+  // Camera should already be active (started at title screen)
+  // If not yet active, try again now
+  if (!camActive && !camAsked) {
+    camAsked = true;
+    startCamera();
+  }
+
+  // Start canvas render loop and countdown
+  let count = 3;
+  showingCountdown = true;
+  countdownVal = count;
+  state.gameRunning = true;
+  lastTimestamp = performance.now();
+  gameStartTime = Date.now() + 3200;
+  requestAnimationFrame(gameRender);
+
+  countdownTimer = setInterval(() => {
+    count--;
+    if (count > 0) {
+      countdownVal = count;
+      playBeat();
+    } else {
+      countdownVal = 0;
+      clearInterval(countdownTimer); countdownTimer = null;
+      setTimeout(() => {
+        showingCountdown = false;
+        gameStartTime = Date.now();
+        nextBeatTime = Date.now() + 200;
+        schedulerTimer = setInterval(schedulerTick, 50);
+      }, 600);
+    }
+  }, 800);
+}
+
+// ── End game ───────────────────────────────────────────────
+function endGame() {
+  state.gameRunning = false;
+  clearInterval(schedulerTimer); schedulerTimer = null;
+  clearInterval(countdownTimer); countdownTimer = null;
+  playSuccess();
+
+  const pct = state.totalBeats > 0 ? state.hitBeats / state.totalBeats : 0;
+  const rating = RATINGS.find(r => pct >= r.min) || RATINGS[RATINGS.length - 1];
+
+  // Stars display
+  const stars = rating.stars;
+  // Save stars in memory
+  starMemory[state.exercise.id] = stars;
+
+  document.getElementById('result-title').textContent = rating.label;
+  document.getElementById('result-score').textContent = Math.floor(state.score);
+  document.getElementById('result-stars').textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
+  document.getElementById('result-msg').innerHTML = rating.msg + `<br><br>
+    <span style="font-size:0.88rem;color:#999">
+    完成 ${state.hitBeats}/${state.totalBeats} 拍 ·
+    最高連擊 ×${state.maxCombo}
+    </span>`;
+
+  showScreen('result');
+}
+
+// ── Button wiring ──────────────────────────────────────────
+document.getElementById('btn-start').addEventListener('click', () => {
+  ensureAudio();
+  // Request camera HERE — inside a user gesture so iOS Safari allows it
+  if (!camAsked) {
+    camAsked = true;
+    startCamera();
+  }
+  if (state.firstPlay) {
+    state.firstPlay = false;
+    showScreen('tutorial');
+  } else {
+    buildExerciseList();
+    showScreen('select');
+  }
+});
+document.getElementById('btn-start').addEventListener('touchend', e => { e.preventDefault(); document.getElementById('btn-start').click(); });
+
+document.getElementById('btn-howto').addEventListener('click', () => {
+  if (!camAsked) { camAsked = true; startCamera(); }
+  showScreen('tutorial');
+});
+
+document.getElementById('btn-share').addEventListener('click', () => {
+  const shareData = {
+    title: '健口大作戰',
+    text: '來跟我一起用這個小遲戲做健口操！跟著節拍動嘴巴，預防吸嚥困難🙊',
+    url: window.location.href,
+  };
+  if (navigator.share) {
+    navigator.share(shareData).catch(() => {});
+  } else {
+    // Fallback: copy link
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      const btn = document.getElementById('btn-share');
+      const orig = btn.textContent;
+      btn.textContent = '✅ 連結已複製！';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }).catch(() => {
+      alert('請複製這個連結： ' + window.location.href);
+    });
+  }
+});
+document.getElementById('btn-howto').addEventListener('touchend', e => { e.preventDefault(); showScreen('tutorial'); });
+
+document.getElementById('btn-tutorial-ok').addEventListener('click', () => {
+  buildExerciseList();
+  showScreen('select');
+});
+document.getElementById('btn-tutorial-ok').addEventListener('touchend', e => { e.preventDefault(); buildExerciseList(); showScreen('select'); });
+
+document.getElementById('btn-back-select').addEventListener('click', () => showScreen('title'));
+document.getElementById('btn-back-select').addEventListener('touchend', e => { e.preventDefault(); showScreen('title'); });
+
+document.getElementById('btn-pause').addEventListener('click', () => {
+  state.paused = true;
+  showScreen('pause');
+});
+
+document.getElementById('btn-resume').addEventListener('click', () => {
+  state.paused = false;
+  showScreen('game');
+  lastTimestamp = performance.now();
+  requestAnimationFrame(gameRender);
+  schedulerTimer = setInterval(schedulerTick, 50);
+});
+
+document.getElementById('btn-quit').addEventListener('click', () => {
+  state.gameRunning = false;
+  clearInterval(schedulerTimer); schedulerTimer = null;
+  clearInterval(countdownTimer); countdownTimer = null;
+  buildExerciseList();
+  showScreen('select');
+});
+
+document.getElementById('btn-replay').addEventListener('click', () => {
+  startExercise(state.exercise);
+});
+
+document.getElementById('btn-back-result').addEventListener('click', () => {
+  buildExerciseList();
+  showScreen('select');
+});
+
+// Touch / click on canvas → note tap
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  onTap(e.clientX - rect.left, e.clientY - rect.top);
+});
+canvas.addEventListener('touchstart', e => {
+  // Don't fire if an overlay is visible
+  e.preventDefault();
+  const t = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  onTap(t.clientX - rect.left, t.clientY - rect.top);
+}, { passive: false });
+
+// ── Camera (inline beside face, always on) ───────────────────
+let camStream = null;
+let camActive = false;
+let camAsked  = false;
+
+const camVideo = document.getElementById('cam-video');
+
+async function startCamera() {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false
+    });
+    camVideo.setAttribute('playsinline', '');
+    camVideo.setAttribute('webkit-playsinline', '');
+    camVideo.srcObject = camStream;
+    camVideo.muted = true;
+    // Wait for video to be ready
+    await new Promise(resolve => {
+      if (camVideo.readyState >= 2) { resolve(); return; }
+      camVideo.onloadeddata = resolve;
+      camVideo.oncanplay   = resolve;
+      setTimeout(resolve, 3000); // fallback
+    });
+    await camVideo.play().catch(() => {});
+    camActive = true;
+    // Init face detection after camera is ready (delayed to not block UI)
+    setTimeout(initFaceMesh, 500);
+  } catch (err) {
+    console.warn('Camera unavailable:', err);
+    camActive = false;
+  }
+}
+
+function stopCamera() {
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  camVideo.srcObject = null;
+  camActive = false;
+}
+
+// Called once on first game start — requests permission silently
+function askCameraOnGameStart() {
+  if (camAsked) return;
+  camAsked = true;
+  startCamera();
+}
+
+// ── Face Motion Detection ────────────────────────────────
+let faceMesh = null;
+let faceDetecting = false;
+let lastMotionScore = 0;      // cooldown to avoid double-scoring
+let motionCooldown = 0;       // timestamp
+let faceLandmarks = null;     // latest landmarks from MediaPipe
+
+// Landmark indices (MediaPipe Face Mesh)
+const LM = {
+  // Mouth
+  upperLip:  13,   // upper inner lip
+  lowerLip:  14,   // lower inner lip
+  leftMouth: 61,
+  rightMouth:291,
+  // Nose tip for head tilt reference
+  noseTip:   1,
+  // Forehead
+  forehead:  10,
+  // Chin
+  chin:      152,
+  // Cheeks (for puff detection)
+  leftCheek: 234,
+  rightCheek:454,
+};
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.crossOrigin = 'anonymous';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function initFaceMesh() {
+  if (faceMesh) return;
+  try {
+    await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js');
+    faceMesh = new FaceMesh({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+    });
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+    faceMesh.onResults(onFaceResults);
+    console.log('FaceMesh ready');
+  } catch(e) {
+    console.warn('FaceMesh unavailable, scoring by tap only:', e);
+    faceMesh = null;
+  }
+}
+
+function onFaceResults(results) {
+  if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+    faceLandmarks = null;
+    return;
+  }
+  faceLandmarks = results.multiFaceLandmarks[0];
+}
+
+// Run face detection on a frame (called from gameRender every ~3 frames)
+let faceFrameCount = 0;
+async function detectFaceFrame() {
+  if (!faceMesh || !camVideo || camVideo.readyState < 2) return;
+  if (faceDetecting) return;
+  faceDetecting = true;
+  try {
+    await faceMesh.send({ image: camVideo });
+  } catch(e) {}
+  faceDetecting = false;
+}
+
+// Measure mouth openness (0=closed, 1=fully open)
+function getMouthOpen() {
+  if (!faceLandmarks) return 0;
+  const upper = faceLandmarks[LM.upperLip];
+  const lower = faceLandmarks[LM.lowerLip];
+  const left  = faceLandmarks[LM.leftMouth];
+  const right = faceLandmarks[LM.rightMouth];
+  const mouthH = Math.abs(lower.y - upper.y);
+  const mouthW = Math.abs(right.x - left.x);
+  return mouthW > 0.001 ? mouthH / mouthW : 0; // ratio
+}
+
+// Measure head nod (chin-forehead Y distance change vs neutral)
+let neutralFaceH = 0;
+function getFaceHeight() {
+  if (!faceLandmarks) return 0;
+  return Math.abs(faceLandmarks[LM.chin].y - faceLandmarks[LM.forehead].y);
+}
+
+// Measure head turn left/right (nose X offset from mouth center)
+function getHeadTurnX() {
+  if (!faceLandmarks) return 0;
+  const nose  = faceLandmarks[LM.noseTip].x;
+  const leftM = faceLandmarks[LM.leftMouth].x;
+  const rightM= faceLandmarks[LM.rightMouth].x;
+  const center= (leftM + rightM) / 2;
+  const mouthW= Math.abs(rightM - leftM);
+  return mouthW > 0.001 ? (nose - center) / mouthW : 0; // -ve = turned left, +ve = right
+}
+
+// Per-exercise motion detector — returns true if action detected
+function checkMotion(ex) {
+  if (!faceLandmarks) return false;
+  const open = getMouthOpen();
+  const turnX = getHeadTurnX();
+
+  switch (ex.id) {
+    case 'tongue-fb':   // mouth opens wide (tongue out)
+      return open > 0.38;
+    case 'tongue-lr':   // mouth opens + head slightly left or right
+      return open > 0.25 && Math.abs(turnX) > 0.08;
+    case 'lip':         // mouth opens wide (張口 phase)
+      return open > 0.35;
+    case 'cheek':       // mouth closes then opens — detect open
+      return open > 0.3;
+    case 'pa-ta-ka':    // rapid mouth open
+      return open > 0.28;
+    case 'swallow':     // mouth stays closed, slight nod — detect closed mouth
+      return open < 0.08;
+    default:
+      return open > 0.3;
+  }
+}
+
+// Called from gameRender to score motion
+function scoreMotionIfDetected() {
+  if (!state.gameRunning || state.paused || !camActive) return;
+  const now = Date.now();
+  if (now < motionCooldown) return; // cooldown
+
+  const ex = state.exercise;
+  if (!ex) return;
+
+  if (checkMotion(ex)) {
+    const pts = 20;
+    state.score += pts;
+    state.hitBeats++;
+    hudScore.textContent = Math.floor(state.score);
+    motionCooldown = now + 900; // 0.9s cooldown between scores
+    // Show popup
+    const np = getNotePosition(canvas.width, canvas.height);
+    hitPopups.push({
+      x: np.x, y: np.y - 30,
+      text: '+20',
+      color: ex.color,
+      t: 0, maxT: 0.8
+    });
+    // Spawn particles
+    for (let i = 0; i < 6; i++) {
+      particles.push(new Particle(
+        np.x + (Math.random()-0.5)*40,
+        np.y + (Math.random()-0.5)*40,
+        ex.color
+      ));
+    }
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────
+showScreen('title');
+
+// Camera is requested on first user tap (btn-start) to comply with iOS Safari policy
+</script>
+</body>
+</html>
