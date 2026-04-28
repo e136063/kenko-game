@@ -1141,7 +1141,17 @@ function gameRender(ts) {
   ctx.fill();
   ctx.restore();
 
-  // (tap prompt removed)
+  // For pa-ta-ka: show "說話+點這裡" hint below the ring
+  if (ex.id === 'pa-ta-ka') {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${Math.min(W * 0.042, 16)}px 'Noto Sans TC', sans-serif`;
+    ctx.fillStyle = ex.color;
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 4;
+    ctx.fillText('說 PA·TA·KA 並點螢幕', W / 2, np.y + 62);
+    ctx.restore();
+  }
 
   // Update & draw notes
   noteQueue = noteQueue.filter(note => {
@@ -1830,7 +1840,7 @@ function checkMotion(ex) {
   }
 }
 
-// Called from gameRender to score motion
+// Called from gameRender to score motion (camera-based, not for pa-ta-ka)
 function scoreMotionIfDetected() {
   if (!state.gameRunning || state.paused || !camActive) return;
   const now = Date.now();
@@ -1838,6 +1848,8 @@ function scoreMotionIfDetected() {
 
   const ex = state.exercise;
   if (!ex) return;
+  // pa-ta-ka uses tap input, not camera motion
+  if (ex.id === 'pa-ta-ka') return;
 
   if (checkMotion(ex)) {
     const pts = 20;
