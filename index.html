@@ -1426,6 +1426,8 @@ function startExercise(ex) {
   faceFrameCount = 0;
   motionCooldown = 0;
   faceLandmarks = null;
+  tongueLRLastDir = 0;
+  tongueLRCooldown = 0;
   updateHUD();
 
   showScreen('game');
@@ -1738,8 +1740,29 @@ function getHeadTurnX() {
   const rightM= faceLandmarks[LM.rightMouth].x;
   const center= (leftM + rightM) / 2;
   const mouthW= Math.abs(rightM - leftM);
-  return mouthW > 0.001 ? (nose - center) / mouthW : 0; // -ve = turned left, +ve = right
+  return mouthW > 0.001 ? (nose - center) / mouthW : 0;
 }
+
+// Measure mouth corner asymmetry — tongue push left/right stretches one side
+// Returns positive = mouth stretched right, negative = stretched left
+function getMouthAsymmetry() {
+  if (!faceLandmarks) return 0;
+  // Compare distances from nose tip to each mouth corner
+  const nose  = faceLandmarks[LM.noseTip];
+  const leftM = faceLandmarks[LM.leftMouth];
+  const rightM= faceLandmarks[LM.rightMouth];
+  const distL = Math.abs(nose.x - leftM.x);
+  const distR = Math.abs(nose.x - rightM.x);
+  const total = distL + distR;
+  // Positive = nose closer to left = mouth stretched to right (tongue right)
+  // Negative = nose closer to right = mouth stretched to left (tongue left)
+  return total > 0.001 ? (distR - distL) / total : 0;
+}
+
+// Track tongue-lr direction for alternating detection
+let tongueLRLastDir = 0;    // -1=left detected, 1=right detected
+let tongueLRSwitched = false;
+let tongueLRCooldown = 0;
 
 // Per-exercise motion detector — returns true if action detected
 function checkMotion(ex) {
@@ -1749,9 +1772,30 @@ function checkMotion(ex) {
 
   switch (ex.id) {
     case 'tongue-fb':   // mouth opens wide (tongue out)
-      return open > 0.38;
-    case 'tongue-lr':   // mouth opens + head slightly left or right
-      return open > 0.25 && Math.abs(turnX) > 0.08;
+      return open > 0.35;
+    case 'tongue-lr': {
+      // Detect tongue going clearly left OR right
+      // Uses mouth asymmetry + head turn combined for robustness
+      const asym = getMouthAsymmetry();
+      const now = Date.now();
+      // Must have mouth slightly open to be doing tongue exercise
+      if (open < 0.08) return false;
+      // Threshold: asymmetry OR head turn clearly to one side
+      const goingRight = (asym >  0.06 || turnX >  0.10);
+      const goingLeft  = (asym < -0.06 || turnX < -0.10);
+      if (now < tongueLRCooldown) return false;
+      if (goingRight && tongueLRLastDir !== 1) {
+        tongueLRLastDir = 1;
+        tongueLRCooldown = now + 400;
+        return true;
+      }
+      if (goingLeft && tongueLRLastDir !== -1) {
+        tongueLRLastDir = -1;
+        tongueLRCooldown = now + 400;
+        return true;
+      }
+      return false;
+    }
     case 'lip':         // mouth opens wide (張口 phase)
       return open > 0.35;
     case 'cheek':       // mouth closes then opens — detect open
