@@ -1798,24 +1798,37 @@ function checkMotion(ex) {
     case 'tongue-fb':   // mouth opens wide (tongue out)
       return open > 0.35;
     case 'tongue-lr': {
-      // Detect tongue going clearly left OR right
-      // Uses mouth asymmetry + head turn combined for robustness
-      const asym = getMouthAsymmetry();
+      if (!faceLandmarks) return false;
       const now = Date.now();
-      // Mouth just needs to be not fully closed
-      if (open < 0.04) return false;
-      // Threshold: asymmetry OR head turn clearly to one side
-      const goingRight = (asym >  0.04 || turnX >  0.07);
-      const goingLeft  = (asym < -0.04 || turnX < -0.07);
       if (now < tongueLRCooldown) return false;
+
+      // Method 1: head turn (most reliable — turning head left/right mimics tongue-lr)
+      // Method 2: mouth asymmetry (nose-to-corner distance difference)
+      // Method 3: cheek landmark X shift (detects cheek bulge from tongue)
+      const asym   = getMouthAsymmetry();
+      const leftCh = faceLandmarks[LM.leftCheek].x;
+      const rightCh= faceLandmarks[LM.rightCheek].x;
+      const noseX  = faceLandmarks[LM.noseTip].x;
+      const faceW  = Math.abs(rightCh - leftCh) || 0.3;
+      // Nose offset from face centre: positive = nose right of centre = head turned right
+      const faceCenter = (leftCh + rightCh) / 2;
+      const noseOff = (noseX - faceCenter) / faceW; // -0.5..+0.5 range
+
+      // Combine: any two signals agree = confident detection
+      const rightSignals = (asym > 0.04 ? 1 : 0) + (turnX > 0.06 ? 1 : 0) + (noseOff > 0.04 ? 1 : 0);
+      const leftSignals  = (asym < -0.04 ? 1 : 0) + (turnX < -0.06 ? 1 : 0) + (noseOff < -0.04 ? 1 : 0);
+
+      const goingRight = rightSignals >= 1; // any one signal is enough
+      const goingLeft  = leftSignals  >= 1;
+
       if (goingRight && tongueLRLastDir !== 1) {
         tongueLRLastDir = 1;
-        tongueLRCooldown = now + 400;
+        tongueLRCooldown = now + 350;
         return true;
       }
       if (goingLeft && tongueLRLastDir !== -1) {
         tongueLRLastDir = -1;
-        tongueLRCooldown = now + 400;
+        tongueLRCooldown = now + 350;
         return true;
       }
       return false;
