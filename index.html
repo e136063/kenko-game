@@ -1108,6 +1108,43 @@ function gameRender(ts) {
     ctx.restore();
   }
 
+  // Mic volume indicator — only shown during pa-ta-ka exercise
+  if (ex.id === 'pa-ta-ka') {
+    const barX = faceCX - faceR;
+    const barY = faceCY + faceR + 8;
+    const barW = faceR * 2;
+    const barH = 8;
+    const fillW = barW * Math.min(micVolume * 5, 1); // amplify for visibility
+    // Background track
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 4);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fill();
+    // Volume fill — green when loud enough
+    if (fillW > 0) {
+      const vol = micVolume * 5;
+      ctx.beginPath();
+      ctx.roundRect(barX, barY, fillW, barH, 4);
+      ctx.fillStyle = vol > 0.4 ? '#4ECDC4' : '#FF6B35';
+      ctx.fill();
+    }
+    // Threshold marker
+    const threshX = barX + barW * 0.2; // 0.04 / 0.2 = 20% of amplified bar
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(threshX, barY - 1);
+    ctx.lineTo(threshX, barY + barH + 1);
+    ctx.stroke();
+    // Label
+    ctx.textAlign = 'center';
+    ctx.font = `500 ${Math.min(W * 0.03, 11)}px 'Noto Sans TC', sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillText('🎤 聲音', barX + barW / 2, barY + barH + 13);
+    ctx.restore();
+  }
+
   // Instruction prompt (only when no camera — camera mode shows bubble instead)
   if (!camActive) {
     ctx.save();
@@ -1548,6 +1585,39 @@ let camAsked  = false;
 
 const camVideo = document.getElementById('cam-video');
 
+// ── Microphone / Volume Detection ───────────────────────
+let micStream  = null;
+let micActive  = false;
+let micVolume  = 0;   // 0–1, updated continuously
+let micAsked   = false;
+
+async function startMic() {
+  if (micAsked) return;
+  micAsked = true;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+    const source    = audioCtx.createMediaStreamSource(micStream);
+    const analyser  = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    micActive = true;
+    (function tick() {
+      if (!micActive) return;
+      analyser.getByteFrequencyData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += buf[i];
+      // Normalise to 0–1 (max possible sum = 255 * buf.length)
+      micVolume = sum / (buf.length * 255);
+      requestAnimationFrame(tick);
+    })();
+  } catch (err) {
+    console.warn('Mic unavailable:', err);
+    micActive = false;
+  }
+}
+
 async function startCamera() {
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
@@ -1567,6 +1637,8 @@ async function startCamera() {
     });
     await camVideo.play().catch(() => {});
     camActive = true;
+    // Start mic alongside camera (same user gesture context)
+    startMic();
     // Init face detection after camera is ready (delayed to not block UI)
     setTimeout(initFaceMesh, 500);
   } catch (err) {
@@ -1755,10 +1827,11 @@ function checkMotion(ex) {
     case 'cheek':       // mouth closes then opens — detect open
       return open > 0.3;
     case 'pa-ta-ka': {
-      // Detect a mouth-open peak: mouth crosses 0.15 from a closed state
-      // This fires once per open action (like saying PA, TA, or KA)
+      // Must BOTH open mouth (rising edge) AND produce sound at same moment
+      // This prevents silent face movements from scoring, and sound-only from scoring
       const isOpen = open > 0.15;
-      if (isOpen && !patakaMouthWasOpen) {
+      const isSpeaking = micActive ? micVolume > 0.04 : true; // fallback if mic unavailable
+      if (isOpen && isSpeaking && !patakaMouthWasOpen) {
         patakaMouthWasOpen = true;  // rising edge — score!
         return true;
       }
