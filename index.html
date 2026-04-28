@@ -1065,9 +1065,9 @@ function gameRender(ts) {
     camVideo.play().catch(() => {});
   }
 
-  // Face detection every 4 frames
+  // Face detection every 6 frames (~10fps on 60fps screen)
   faceFrameCount++;
-  if (faceFrameCount % 4 === 0) detectFaceFrame();
+  if (faceFrameCount % 6 === 0) detectFaceFrame();
   scoreMotionIfDetected();
 
   const W = canvas.width;
@@ -1091,14 +1091,10 @@ function gameRender(ts) {
     ctx.translate(-W / 2, 0);
     ctx.drawImage(camVideo, dx, dy, dw, dh);
     ctx.restore();
-    // Dark gradient overlay top/bottom
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0,    'rgba(0,0,0,0.32)');
-    grad.addColorStop(0.22, 'rgba(0,0,0,0)');
-    grad.addColorStop(0.78, 'rgba(0,0,0,0)');
-    grad.addColorStop(1,    'rgba(0,0,0,0.22)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
+    // Dark bands top and bottom (no gradient object needed each frame)
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(0, 0, W, H * 0.22);
+    ctx.fillRect(0, H * 0.78, W, H * 0.22);
   } else {
     ctx.fillStyle = ex.bg;
     ctx.fillRect(0, 0, W, H);
