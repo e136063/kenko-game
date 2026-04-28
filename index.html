@@ -713,62 +713,67 @@ function playSuccess() {
   );
 }
 
-// ── Background Music ────────────────────────────
-let bgmMasterGain = null;
-let bgmPlaying    = false;
-let bgmTimers     = [];
-let bgmLoopId     = null;
+// ── Background Music (Web Audio precise scheduling) ────────────
+let bgmMasterGain  = null;
+let bgmPlaying     = false;
+let bgmSchedTimer  = null;  // setInterval for look-ahead scheduler
+let bgmNextTime    = 0;     // next note start time in audioCtx.currentTime
+let bgmStepIndex   = 0;     // current position in melody
 
 // C major pentatonic: C4 D E G A  C5 D5 E5 G5
-const BGM_NOTES = [261, 293, 329, 392, 440, 523, 587, 659, 784];
+const BGM_FREQ = [261.6, 293.7, 329.6, 392.0, 440.0, 523.3, 587.3, 659.3, 784.0];
 
-// 32-step melody (indices into BGM_NOTES, -1 = rest)
+// 32-step melody (-1 = rest), indices into BGM_FREQ
 const BGM_MELODY = [
   4,2,0,2,  3,2,0,-1,  4,5,4,2,  0,-1,2,3,
   4,2,0,2,  5,4,2,0,   3,2,0,-1, 2,4,5,4
 ];
-// 8 pad chords (one per bar, indices into BGM_NOTES)
+// Pad chord per bar (4 steps), indices into BGM_FREQ
 const BGM_PAD = [
   [0,2,4],[0,2,4],[3,5,7],[3,5,7],
   [0,2,4],[1,3,5],[0,2,4],[0,2,4]
 ];
 
-function bgmPlayNote(freq, dur, vol, type='sine') {
+const BGM_BPM      = 72;
+const BGM_BEAT_SEC = 60 / BGM_BPM;  // seconds per beat
+const BGM_LOOKAHEAD = 0.2;          // schedule this many seconds ahead
+
+function bgmScheduleNote(freq, startT, dur, vol) {
   if (!audioCtx || !bgmMasterGain) return;
   const osc  = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  osc.type = type;
+  osc.type = 'sine';
   osc.frequency.value = freq;
-  gain.gain.setValueAtTime(0, audioCtx.currentTime);
-  gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.06);
-  gain.gain.setValueAtTime(vol, audioCtx.currentTime + dur * 0.7);
-  gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + dur);
+  gain.gain.setValueAtTime(0, startT);
+  gain.gain.linearRampToValueAtTime(vol, startT + 0.05);
+  gain.gain.setValueAtTime(vol, startT + dur * 0.75);
+  gain.gain.linearRampToValueAtTime(0, startT + dur);
   osc.connect(gain).connect(bgmMasterGain);
-  osc.start();
-  osc.stop(audioCtx.currentTime + dur + 0.05);
+  osc.start(startT);
+  osc.stop(startT + dur + 0.02);
 }
 
-function bgmStartLoop() {
+function bgmScheduleTick() {
   if (!bgmPlaying || !audioCtx) return;
-  const beat = (60 / 72) * 1000; // 72 BPM, gentle
-  const bar  = beat * 4;
-  // Melody layer
-  BGM_MELODY.forEach((idx, i) => {
-    if (idx < 0) return;
-    bgmTimers.push(setTimeout(() => {
-      if (!bgmPlaying) return;
-      bgmPlayNote(BGM_NOTES[idx], beat * 0.65, 0.042, 'sine');
-    }, i * beat));
-  });
-  // Pad layer (one chord per bar, one octave lower)
-  BGM_PAD.forEach((chord, i) => {
-    bgmTimers.push(setTimeout(() => {
-      if (!bgmPlaying) return;
-      chord.forEach(ni => bgmPlayNote(BGM_NOTES[ni] * 0.5, bar * 0.82, 0.016, 'sine'));
-    }, i * bar));
-  });
-  // Loop
-  bgmLoopId = setTimeout(bgmStartLoop, BGM_MELODY.length * beat);
+  const scheduleUntil = audioCtx.currentTime + BGM_LOOKAHEAD;
+  while (bgmNextTime < scheduleUntil) {
+    const step  = bgmStepIndex % BGM_MELODY.length;
+    const noteIdx = BGM_MELODY[step];
+    const t     = bgmNextTime;
+    // Melody note
+    if (noteIdx >= 0) {
+      bgmScheduleNote(BGM_FREQ[noteIdx], t, BGM_BEAT_SEC * 0.65, 0.10);
+    }
+    // Pad chord — play at start of each bar (every 4 steps)
+    if (step % 4 === 0) {
+      const barIdx = (step / 4) % BGM_PAD.length;
+      BGM_PAD[barIdx].forEach(ni => {
+        bgmScheduleNote(BGM_FREQ[ni] * 0.5, t, BGM_BEAT_SEC * 3.8, 0.04);
+      });
+    }
+    bgmNextTime += BGM_BEAT_SEC;
+    bgmStepIndex++;
+  }
 }
 
 function startBGM() {
@@ -776,17 +781,19 @@ function startBGM() {
   ensureAudio();
   bgmMasterGain = audioCtx.createGain();
   bgmMasterGain.gain.setValueAtTime(0, audioCtx.currentTime);
-  bgmMasterGain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 2);
+  bgmMasterGain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 2.0);
   bgmMasterGain.connect(audioCtx.destination);
-  bgmPlaying = true;
-  bgmStartLoop();
+  bgmPlaying    = true;
+  bgmNextTime   = audioCtx.currentTime + 0.1;
+  bgmStepIndex  = 0;
+  bgmScheduleTick();
+  bgmSchedTimer = setInterval(bgmScheduleTick, 50); // look-ahead every 50ms
 }
 
 function stopBGM(fade = 1.5) {
   if (!bgmPlaying) return;
   bgmPlaying = false;
-  bgmTimers.forEach(clearTimeout); bgmTimers = [];
-  clearTimeout(bgmLoopId);
+  clearInterval(bgmSchedTimer);
   if (bgmMasterGain && audioCtx) {
     bgmMasterGain.gain.cancelScheduledValues(audioCtx.currentTime);
     bgmMasterGain.gain.setValueAtTime(bgmMasterGain.gain.value, audioCtx.currentTime);
@@ -796,13 +803,12 @@ function stopBGM(fade = 1.5) {
 
 function pauseBGM() {
   if (!bgmPlaying) return;
-  bgmTimers.forEach(clearTimeout); bgmTimers = [];
-  clearTimeout(bgmLoopId);
   bgmPlaying = false;
+  clearInterval(bgmSchedTimer);
   if (bgmMasterGain && audioCtx) {
     bgmMasterGain.gain.cancelScheduledValues(audioCtx.currentTime);
     bgmMasterGain.gain.setValueAtTime(bgmMasterGain.gain.value, audioCtx.currentTime);
-    bgmMasterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.4);
+    bgmMasterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
   }
 }
 
@@ -810,10 +816,12 @@ function resumeBGM() {
   if (bgmPlaying) return;
   bgmMasterGain = audioCtx.createGain();
   bgmMasterGain.gain.setValueAtTime(0, audioCtx.currentTime);
-  bgmMasterGain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 0.6);
+  bgmMasterGain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 0.5);
   bgmMasterGain.connect(audioCtx.destination);
-  bgmPlaying = true;
-  bgmStartLoop();
+  bgmPlaying   = true;
+  bgmNextTime  = audioCtx.currentTime + 0.1;
+  bgmScheduleTick();
+  bgmSchedTimer = setInterval(bgmScheduleTick, 50);
 }
 
 // ── Game Engine ────────────────────────────────────────────
