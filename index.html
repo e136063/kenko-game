@@ -472,7 +472,7 @@
         畫面上的大臉會示範健口操動作<br><br>
         看到<strong>發光圓圈</strong>出現時<br>
         配合節拍<strong>做出對應動作</strong>！<br><br>
-        完美點擊可獲得連擊加分<br>
+        跟著節拍做指定動作即可得分<br>
         <strong>加油！嘴巴動起來！</strong>
       </div>
       <button class="btn-primary" id="btn-tutorial-ok">我知道了！</button>
@@ -974,7 +974,7 @@ function drawFace(ctx, cx, cy, r, ex, beatPhase) {
   } else if (style === 'speak') {
     const phaseLabels = ['啪', '他', '卡'];
     const ph = faceAnim.phase % 3;
-    const openAmt = 0.15 + Math.sin(p * Math.PI) * 0.18;
+    const openAmt = Math.max(0.05, 0.15 + Math.sin(Math.max(0,p) * Math.PI) * 0.18);
     ctx.fillStyle = '#C0392B';
     ctx.beginPath();
     ctx.ellipse(cx, mouthY, mouthW * 0.75, r * openAmt, 0, 0, Math.PI*2);
@@ -1005,13 +1005,14 @@ function drawFace(ctx, cx, cy, r, ex, beatPhase) {
 // ── Note zone ─────────────────────────────────────────────
 function getNotePosition(W, H) {
   // Bottom center — tap zone (above dark band)
-  return { x: W / 2, y: H * 0.80 };
+  return { x: W / 2, y: H * 0.75 };
 }
 
 // ── Game rendering ─────────────────────────────────────────
 let lastTimestamp = 0;
 function gameRender(ts) {
   if (!state.gameRunning) return;
+  try {
   const dt = Math.min((ts - lastTimestamp) / 1000, 0.05);
   lastTimestamp = ts;
 
@@ -1093,7 +1094,7 @@ function gameRender(ts) {
   // Beat phase
   const beatMs = 60000 / ex.bpm;
   const elapsed = now - gameStartTime;
-  const beatT = (elapsed % beatMs) / beatMs;
+  const beatT = Math.max(0, Math.min(1, (elapsed % beatMs) / beatMs));
   faceAnim.beatPhase = beatT;
 
   // Phase label — top center
@@ -1229,13 +1230,17 @@ function gameRender(ts) {
       ctx.font = `900 ${W * 0.25}px 'Noto Sans TC', sans-serif`;
       ctx.fillStyle = ex.color;
       ctx.globalAlpha = 0.85;
-      ctx.fillText(countdownVal, W/2, H/2);
+      ctx.fillText(countdownVal, W/2, H * 0.72);
       ctx.globalAlpha = 1;
       ctx.restore();
     }
   }
 
   if (!state.paused) requestAnimationFrame(gameRender);
+  } catch(e) {
+    console.error('gameRender error:', e);
+    if (!state.paused) requestAnimationFrame(gameRender);
+  }
 }
 
 function drawNote(note, np, W, H) {
@@ -1515,8 +1520,7 @@ document.getElementById('btn-quit').addEventListener('click', () => {
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
   clearInterval(motionTimer); motionTimer = null;
-  buildExerciseList();
-  showScreen('select');
+  endGame();
 });
 
 document.getElementById('btn-replay').addEventListener('click', () => {
