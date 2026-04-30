@@ -1020,16 +1020,11 @@ function gameRender(ts) {
     if (camVideo.paused || camVideo.ended) {
       camVideo.play().catch(() => {});
     }
-    // If readyState dropped, treat as frozen — hide cam briefly to reset
-    if (camVideo.readyState < 2 && faceFrameCount % 180 === 0) {
-      camVideo.load();
-      camVideo.play().catch(() => {});
-    }
   }
 
-  // Face detection every 6 frames (~10fps on 60fps screen)
+  // Pixel-diff motion detection every 3 frames (~20fps)
   faceFrameCount++;
-  if (faceFrameCount % 6 === 0) detectFaceFrame();
+  if (faceFrameCount % 3 === 0) captureMotionFrame();
   scoreMotionIfDetected();
 
   const W = canvas.width;
@@ -1392,7 +1387,9 @@ function startExercise(ex) {
   faceAnim.phase = 0;
   faceFrameCount = 0;
   motionCooldown = 0;
-  faceLandmarks = null;
+  prevFrame = null;  // reset pixel-diff baseline
+  smoothDiff = 0; smoothDiffBot = 0; smoothDiffL = 0; smoothDiffR = 0;
+  motionDiff = 0; motionDiffBot = 0; motionDiffL = 0; motionDiffR = 0;
   tongueLRLastDir = 0;
   tongueLRCooldown = 0;
   patakaMouthWasOpen = false;
@@ -1644,8 +1641,6 @@ async function startCamera() {
     camActive = true;
     // Start mic alongside camera (same user gesture context)
     startMic();
-    // Init face detection after camera is ready (delayed to not block UI)
-    setTimeout(initFaceMesh, 500);
   } catch (err) {
     console.warn('Camera unavailable:', err);
     camActive = false;
@@ -1665,204 +1660,165 @@ function askCameraOnGameStart() {
   startCamera();
 }
 
-// ── Face Motion Detection ────────────────────────────────
-let faceMesh = null;
-let faceDetecting = false;
-let lastMotionScore = 0;      // cooldown to avoid double-scoring
+// ── Pixel-diff Motion Detection (no external library) ────────
+// Uses OffscreenCanvas to compare camera frames pixel by pixel.
+// Works on any browser without MediaPipe — never freezes.
+
 let motionCooldown = 0;       // timestamp
-let faceLandmarks = null;     // latest landmarks from MediaPipe
-
-// Landmark indices (MediaPipe Face Mesh)
-const LM = {
-  // Mouth
-  upperLip:  13,   // upper inner lip
-  lowerLip:  14,   // lower inner lip
-  leftMouth: 61,
-  rightMouth:291,
-  // Nose tip for head tilt reference
-  noseTip:   1,
-  // Forehead
-  forehead:  10,
-  // Chin
-  chin:      152,
-  // Cheeks (for puff detection)
-  leftCheek: 234,
-  rightCheek:454,
-};
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = src; s.crossOrigin = 'anonymous';
-    s.onload = resolve; s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
-
-async function initFaceMesh() {
-  if (faceMesh) return;
-  try {
-    await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js');
-    faceMesh = new FaceMesh({
-      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
-    });
-    faceMesh.setOptions({
-      maxNumFaces: 1,
-      refineLandmarks: false,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
-    faceMesh.onResults(onFaceResults);
-    console.log('FaceMesh ready');
-  } catch(e) {
-    console.warn('FaceMesh unavailable, scoring by tap only:', e);
-    faceMesh = null;
-  }
-}
-
-function onFaceResults(results) {
-  if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
-    faceLandmarks = null;
-    return;
-  }
-  faceLandmarks = results.multiFaceLandmarks[0];
-}
-
-// Run face detection on a frame (called from gameRender every ~3 frames)
 let faceFrameCount = 0;
-let faceDetectTimeout = null;
-async function detectFaceFrame() {
-  if (!faceMesh || !camVideo || camVideo.readyState < 2) return;
-  if (faceDetecting) {
-    // Safety: if stuck for >2s, force-reset
-    if (!faceDetectTimeout) {
-      faceDetectTimeout = setTimeout(() => {
-        faceDetecting = false;
-        faceDetectTimeout = null;
-      }, 2000);
-    }
-    return;
-  }
-  faceDetecting = true;
-  clearTimeout(faceDetectTimeout);
-  faceDetectTimeout = null;
-  try {
-    // Race: if faceMesh.send hangs, resolve after 1.5s
-    await Promise.race([
-      faceMesh.send({ image: camVideo }),
-      new Promise(resolve => setTimeout(resolve, 1500))
-    ]);
-  } catch(e) {}
-  faceDetecting = false;
-}
 
-// Measure mouth openness (0=closed, 1=fully open)
-function getMouthOpen() {
-  if (!faceLandmarks) return 0;
-  const upper = faceLandmarks[LM.upperLip];
-  const lower = faceLandmarks[LM.lowerLip];
-  const left  = faceLandmarks[LM.leftMouth];
-  const right = faceLandmarks[LM.rightMouth];
-  const mouthH = Math.abs(lower.y - upper.y);
-  const mouthW = Math.abs(right.x - left.x);
-  return mouthW > 0.001 ? mouthH / mouthW : 0; // ratio
-}
+// Offscreen canvas for pixel sampling
+const SAMPLE_W = 80;  // small for speed
+const SAMPLE_H = 60;
+let motionCanvas = null;
+let motionCtx = null;
+let prevFrame = null;  // Uint8ClampedArray of previous frame
+let prevFrameLeft = null;  // left-half prev
+let prevFrameRight = null; // right-half prev
+let prevFrameTop = null;   // top-half prev (forehead/nose)
+let prevFrameBot = null;   // bottom-half prev (mouth/chin)
 
-// Measure head nod (chin-forehead Y distance change vs neutral)
-let neutralFaceH = 0;
-function getFaceHeight() {
-  if (!faceLandmarks) return 0;
-  return Math.abs(faceLandmarks[LM.chin].y - faceLandmarks[LM.forehead].y);
-}
+// Motion state
+let motionDiff = 0;        // overall diff (0..1)
+let motionDiffL = 0;       // left-half diff
+let motionDiffR = 0;       // right-half diff
+let motionDiffTop = 0;     // top-half diff
+let motionDiffBot = 0;     // bottom-half diff
 
-// Measure head turn left/right (nose X offset from mouth center)
-function getHeadTurnX() {
-  if (!faceLandmarks) return 0;
-  const nose  = faceLandmarks[LM.noseTip].x;
-  const leftM = faceLandmarks[LM.leftMouth].x;
-  const rightM= faceLandmarks[LM.rightMouth].x;
-  const center= (leftM + rightM) / 2;
-  const mouthW= Math.abs(rightM - leftM);
-  return mouthW > 0.001 ? (nose - center) / mouthW : 0;
-}
-
-// Measure mouth corner asymmetry — tongue push left/right stretches one side
-// Returns positive = mouth stretched right, negative = stretched left
-function getMouthAsymmetry() {
-  if (!faceLandmarks) return 0;
-  // Compare distances from nose tip to each mouth corner
-  const nose  = faceLandmarks[LM.noseTip];
-  const leftM = faceLandmarks[LM.leftMouth];
-  const rightM= faceLandmarks[LM.rightMouth];
-  const distL = Math.abs(nose.x - leftM.x);
-  const distR = Math.abs(nose.x - rightM.x);
-  const total = distL + distR;
-  // Positive = nose closer to left = mouth stretched to right (tongue right)
-  // Negative = nose closer to right = mouth stretched to left (tongue left)
-  return total > 0.001 ? (distR - distL) / total : 0;
-}
-
-// Track tongue-lr direction for alternating detection
-let tongueLRLastDir = 0;    // -1=left detected, 1=right detected
-let tongueLRSwitched = false;
+// tongue-lr alternating direction tracking
+let tongueLRLastDir = 0;    // -1=left, 1=right
 let tongueLRCooldown = 0;
 
-// pa-ta-ka: track open-close cycle
-let patakaMouthWasOpen = false; // whether mouth was open last frame
+// pa-ta-ka: open/close cycle
+let patakaMouthWasOpen = false;
+
+// Motion smoothing
+let smoothDiff = 0;
+let smoothDiffBot = 0;
+let smoothDiffL = 0;
+let smoothDiffR = 0;
+
+function ensureMotionCanvas() {
+  if (motionCanvas) return;
+  motionCanvas = document.createElement('canvas');
+  motionCanvas.width  = SAMPLE_W;
+  motionCanvas.height = SAMPLE_H;
+  motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
+}
+
+function captureMotionFrame() {
+  if (!camActive || !camVideo || camVideo.readyState < 2) return;
+  if (camVideo.videoWidth === 0) return;
+  ensureMotionCanvas();
+
+  // Draw current video frame (mirror: flip horizontal to match selfie view)
+  motionCtx.save();
+  motionCtx.translate(SAMPLE_W, 0);
+  motionCtx.scale(-1, 1);
+  motionCtx.drawImage(camVideo, 0, 0, SAMPLE_W, SAMPLE_H);
+  motionCtx.restore();
+
+  // Focus on centre of frame (face region) — skip outer 20%
+  const fx = Math.floor(SAMPLE_W * 0.2);
+  const fy = Math.floor(SAMPLE_H * 0.1);
+  const fw = SAMPLE_W - fx * 2;
+  const fh = SAMPLE_H - fy * 2;
+
+  let imgData;
+  try {
+    imgData = motionCtx.getImageData(fx, fy, fw, fh);
+  } catch(e) { return; } // tainted canvas (shouldn't happen with same-origin camera)
+
+  const curr = imgData.data; // RGBA flat array
+  const len  = fw * fh;     // number of pixels
+  const hh   = Math.floor(fh / 2);
+  const hw   = Math.floor(fw / 2);
+
+  if (!prevFrame || prevFrame.length !== curr.length) {
+    prevFrame = new Uint8ClampedArray(curr);
+    return; // need at least 2 frames
+  }
+
+  // Compute per-pixel luminance diff across all regions
+  let sumAll = 0, sumTop = 0, sumBot = 0, sumL = 0, sumR = 0;
+  let cntAll = 0, cntTop = 0, cntBot = 0, cntL = 0, cntR = 0;
+
+  for (let py = 0; py < fh; py++) {
+    for (let px = 0; px < fw; px++) {
+      const i = (py * fw + px) * 4;
+      // Luminance (quick approx)
+      const cLum = (curr[i] * 77 + curr[i+1] * 150 + curr[i+2] * 29) >> 8;
+      const pLum = (prevFrame[i] * 77 + prevFrame[i+1] * 150 + prevFrame[i+2] * 29) >> 8;
+      const d = Math.abs(cLum - pLum) / 255;
+
+      sumAll += d; cntAll++;
+      if (py < hh)  { sumTop += d; cntTop++; }
+      else          { sumBot += d; cntBot++; }
+      if (px < hw)  { sumL   += d; cntL++;   }
+      else          { sumR   += d; cntR++;   }
+    }
+  }
+
+  const raw     = cntAll > 0 ? sumAll / cntAll : 0;
+  const rawBot  = cntBot > 0 ? sumBot / cntBot : 0;
+  const rawL    = cntL   > 0 ? sumL   / cntL   : 0;
+  const rawR    = cntR   > 0 ? sumR   / cntR   : 0;
+
+  // Exponential smoothing (α=0.4) to reduce noise
+  const A = 0.4;
+  smoothDiff    = smoothDiff    * (1-A) + raw    * A;
+  smoothDiffBot = smoothDiffBot * (1-A) + rawBot * A;
+  smoothDiffL   = smoothDiffL   * (1-A) + rawL   * A;
+  smoothDiffR   = smoothDiffR   * (1-A) + rawR   * A;
+
+  motionDiff    = smoothDiff;
+  motionDiffBot = smoothDiffBot;
+  motionDiffL   = smoothDiffL;
+  motionDiffR   = smoothDiffR;
+
+  // Save frame
+  prevFrame.set(curr);
+}
 
 // Per-exercise motion detector — returns true if action detected
 function checkMotion(ex) {
-  if (!faceLandmarks) return false;
-  const open = getMouthOpen();
-  const turnX = getHeadTurnX();
+  // Need some motion captured
+  if (!prevFrame) return false;
+
+  const now = Date.now();
 
   switch (ex.id) {
-    case 'tongue-fb':   // mouth opens wide (tongue out)
-      return open > 0.35;
+    case 'tongue-fb':
+      // Tongue forward: large overall motion (mouth area moves significantly)
+      return motionDiff > 0.045;
+
     case 'tongue-lr': {
-      if (!faceLandmarks) return false;
-      const now = Date.now();
+      // Tongue left/right: asymmetric motion between left and right halves
       if (now < tongueLRCooldown) return false;
-
-      // Method 1: head turn (most reliable — turning head left/right mimics tongue-lr)
-      // Method 2: mouth asymmetry (nose-to-corner distance difference)
-      // Method 3: cheek landmark X shift (detects cheek bulge from tongue)
-      const asym   = getMouthAsymmetry();
-      const leftCh = faceLandmarks[LM.leftCheek].x;
-      const rightCh= faceLandmarks[LM.rightCheek].x;
-      const noseX  = faceLandmarks[LM.noseTip].x;
-      const faceW  = Math.abs(rightCh - leftCh) || 0.3;
-      // Nose offset from face centre: positive = nose right of centre = head turned right
-      const faceCenter = (leftCh + rightCh) / 2;
-      const noseOff = (noseX - faceCenter) / faceW; // -0.5..+0.5 range
-
-      // Combine: any two signals agree = confident detection
-      const rightSignals = (asym > 0.04 ? 1 : 0) + (turnX > 0.06 ? 1 : 0) + (noseOff > 0.04 ? 1 : 0);
-      const leftSignals  = (asym < -0.04 ? 1 : 0) + (turnX < -0.06 ? 1 : 0) + (noseOff < -0.04 ? 1 : 0);
-
-      const goingRight = rightSignals >= 1; // any one signal is enough
-      const goingLeft  = leftSignals  >= 1;
+      const asymDiff = motionDiffR - motionDiffL;  // mirrored selfie: right on screen = left face
+      const goingRight = asymDiff >  0.015 && motionDiff > 0.018;
+      const goingLeft  = asymDiff < -0.015 && motionDiff > 0.018;
 
       if (goingRight && tongueLRLastDir !== 1) {
         tongueLRLastDir = 1;
-        tongueLRCooldown = now + 350;
+        tongueLRCooldown = now + 400;
         return true;
       }
       if (goingLeft && tongueLRLastDir !== -1) {
         tongueLRLastDir = -1;
-        tongueLRCooldown = now + 350;
+        tongueLRCooldown = now + 400;
         return true;
       }
       return false;
     }
-    case 'lip':         // mouth opens wide (張口 phase)
-      return open > 0.35;
-    case 'cheek':       // mouth closes then opens — detect open
-      return open > 0.3;
+
+    case 'lip':
+      // Lip exercise: notable overall motion (mouth opening/closing)
+      return motionDiff > 0.04;
+
     case 'pa-ta-ka': {
-      // Detect mouth open rising edge — each time mouth opens counts as one syllable
-      const isOpen = open > 0.15;
+      // Rising-edge: mouth opens sharply (bot diff spikes)
+      const isOpen = motionDiffBot > 0.05;
       if (isOpen && !patakaMouthWasOpen) {
         patakaMouthWasOpen = true;
         return true;
@@ -1872,7 +1828,7 @@ function checkMotion(ex) {
     }
 
     default:
-      return open > 0.3;
+      return motionDiff > 0.04;
   }
 }
 
