@@ -1390,6 +1390,8 @@ function startExercise(ex) {
   motionDiff = 0; motionDiffBot = 0; motionDiffL = 0; motionDiffR = 0;
   tongueLRLastDir = 0;
   tongueLRCooldown = 0;
+  tongueFBPhase = 0; tongueFBPeak = 0;
+  lipPhase = 0;
   patakaMouthWasOpen = false;
   updateHUD();
 
@@ -1648,6 +1650,13 @@ let motionDiffBot = 0;     // bottom-half diff
 let tongueLRLastDir = 0;    // -1=left, 1=right
 let tongueLRCooldown = 0;
 
+// tongue-fb: two-phase (extend → retract)
+let tongueFBPhase = 0;      // 0=idle, 1=extended
+let tongueFBPeak  = 0;
+
+// lip: two-phase (open → close)
+let lipPhase = 0;           // 0=idle, 1=opened
+
 // pa-ta-ka: open/close cycle
 let patakaMouthWasOpen = false;
 
@@ -1740,55 +1749,79 @@ function captureMotionFrame() {
   }
 }
 
-// Per-exercise motion detector — returns true if action detected
+// Per-exercise motion detector — returns true only when a COMPLETE action is done
+// Each exercise uses a two-phase FSM: "action peak" → "return to rest"
 function checkMotion(ex) {
-  // Need some motion captured
   if (!prevFrame) return false;
-
   const now = Date.now();
 
   switch (ex.id) {
-    case 'tongue-fb':
-      // Tongue forward: large overall motion (mouth area moves significantly)
-      return motionDiff > 0.045;
 
-    case 'tongue-lr': {
-      // Tongue left/right: asymmetric motion between left and right halves
-      if (now < tongueLRCooldown) return false;
-      const asymDiff = motionDiffR - motionDiffL;  // mirrored selfie: right on screen = left face
-      const goingRight = asymDiff >  0.015 && motionDiff > 0.018;
-      const goingLeft  = asymDiff < -0.015 && motionDiff > 0.018;
-
-      if (goingRight && tongueLRLastDir !== 1) {
-        tongueLRLastDir = 1;
-        tongueLRCooldown = now + 400;
-        return true;
+    case 'tongue-fb': {
+      // Complete action = tongue extends (motionDiff spike HIGH) then retracts (drops back LOW)
+      // Phase 0 → 1: wait for big extension spike
+      if (tongueFBPhase === 0) {
+        if (motionDiff > 0.07) {          // clear tongue-out movement
+          tongueFBPhase = 1;
+          tongueFBPeak  = motionDiff;
+        }
+        return false;
       }
-      if (goingLeft && tongueLRLastDir !== -1) {
-        tongueLRLastDir = -1;
-        tongueLRCooldown = now + 400;
-        return true;
+      // Phase 1 → score: motion drops back to near-still = tongue retracted
+      if (tongueFBPhase === 1) {
+        if (motionDiff < 0.025) {         // back to rest
+          tongueFBPhase = 0;
+          tongueFBPeak  = 0;
+          return true;                    // ✓ complete cycle
+        }
+        // update peak but stay in phase 1
+        if (motionDiff > tongueFBPeak) tongueFBPeak = motionDiff;
       }
       return false;
     }
 
-    case 'lip':
-      // Lip exercise: notable overall motion (mouth opening/closing)
-      return motionDiff > 0.04;
+    case 'tongue-lr': {
+      // Complete action = tongue goes clearly to one side THEN the other
+      if (now < tongueLRCooldown) return false;
+      const asym = motionDiffR - motionDiffL; // mirrored selfie
+      const goRight = asym >  0.030 && motionDiff > 0.025;
+      const goLeft  = asym < -0.030 && motionDiff > 0.025;
 
-    case 'pa-ta-ka': {
-      // Rising-edge: mouth opens sharply (bot diff spikes)
-      const isOpen = motionDiffBot > 0.05;
-      if (isOpen && !patakaMouthWasOpen) {
-        patakaMouthWasOpen = true;
-        return true;
+      if (goRight && tongueLRLastDir !== 1) {
+        const wasMoving = tongueLRLastDir !== 0;
+        tongueLRLastDir = 1;
+        tongueLRCooldown = now + 500;
+        // Score only when direction changes (left→right or right→left = complete sweep)
+        return wasMoving;
       }
-      if (!isOpen) patakaMouthWasOpen = false;
+      if (goLeft && tongueLRLastDir !== -1) {
+        const wasMoving = tongueLRLastDir !== 0;
+        tongueLRLastDir = -1;
+        tongueLRCooldown = now + 500;
+        return wasMoving;
+      }
+      return false;
+    }
+
+    case 'lip': {
+      // Complete action = mouth opens wide (bot spike) then closes back
+      if (lipPhase === 0) {
+        if (motionDiffBot > 0.07) {       // clear lip open / pout
+          lipPhase = 1;
+        }
+        return false;
+      }
+      if (lipPhase === 1) {
+        if (motionDiffBot < 0.025) {      // back to rest = mouth closed again
+          lipPhase = 0;
+          return true;                    // ✓ complete open→close cycle
+        }
+      }
       return false;
     }
 
     default:
-      return motionDiff > 0.04;
+      return motionDiff > 0.06;
   }
 }
 
@@ -1800,9 +1833,21 @@ function scoreMotionIfDetected() {
 
   const ex = state.exercise;
   if (!ex) return;
-  // pa-ta-ka scores via microphone volume, not camera pixel-diff
+  // pa-ta-ka scores via microphone — complete syllable = loud then quiet
   if (ex.id === 'pa-ta-ka') {
-    if (!micActive || micVolume < MIC_THRESHOLD) return;
+    if (!micActive) return;
+    // Two-phase: 0=waiting for sound, 1=heard sound, waiting for silence
+    if (!patakaMouthWasOpen) {
+      // Phase 0: waiting for a clear vocalization
+      if (micVolume < MIC_THRESHOLD) return;
+      patakaMouthWasOpen = true;  // reuse flag for mic "was speaking"
+      return;
+    } else {
+      // Phase 1: heard sound, wait for it to drop back to silence
+      if (micVolume > 0.06) return;  // still speaking
+      patakaMouthWasOpen = false;
+      if (now < motionCooldown) return;
+    }
     const pts = 5;
     state.score += pts;
     state.hitBeats++;
