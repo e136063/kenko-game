@@ -1022,7 +1022,10 @@ function gameRender(ts) {
     }
   }
 
-  // Motion scoring (pixel-diff runs in its own interval, not here)
+  // Scheduler tick — run every frame via rAF (setInterval is throttled on iOS with camera)
+  if (!showingCountdown) schedulerTick();
+
+  // Motion scoring
   faceFrameCount++;
   scoreMotionIfDetected();
 
@@ -1270,9 +1273,8 @@ function schedulerTick() {
 
   while (nextBeatTime < now + 800) {
     if (globalBeatIndex >= ex.totalBeats) {
-      // End game
-      setTimeout(endGame, 1000);
-      clearInterval(schedulerTimer);
+      // End game — use flag to prevent re-entry
+      if (state.gameRunning) { state.gameRunning = false; setTimeout(endGame, 1000); }
       return;
     }
     // Queue note
@@ -1428,11 +1430,11 @@ function startExercise(ex) {
   nextBeatTime = gameStartTime + 200;
   requestAnimationFrame(gameRender);
 
-  // Start scheduler & motionTimer immediately — scheduler won't produce notes until nextBeatTime
-  clearInterval(schedulerTimer);
-  schedulerTimer = setInterval(schedulerTick, 50);
+  // motionTimer for pixel-diff (low priority, 8fps is fine)
   clearInterval(motionTimer);
   motionTimer = setInterval(captureMotionFrame, 125);
+  // schedulerTimer no longer needed — schedulerTick runs inside gameRender via rAF
+  clearInterval(schedulerTimer); schedulerTimer = null;
 }
 
 // ── End game ───────────────────────────────────────────────
@@ -1527,7 +1529,6 @@ document.getElementById('btn-resume').addEventListener('click', () => {
   showScreen('game');
   lastTimestamp = performance.now();
   requestAnimationFrame(gameRender);
-  schedulerTimer = setInterval(schedulerTick, 50);
   clearInterval(motionTimer);
   motionTimer = setInterval(captureMotionFrame, 125);
 });
