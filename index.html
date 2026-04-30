@@ -1023,8 +1023,7 @@ function gameRender(ts) {
   }
 
   // Scheduler tick — run every frame via rAF (setInterval is throttled on iOS with camera)
-  // pa-ta-ka does not use noteQueue — skip schedulerTick entirely
-  if (!showingCountdown && ex.id !== 'pa-ta-ka') schedulerTick();
+  if (!showingCountdown) schedulerTick();
 
   // Motion scoring
   faceFrameCount++;
@@ -1125,44 +1124,48 @@ function gameRender(ts) {
   }
 
   // Note zone ring (target) — keep centered
-  // pa-ta-ka has no falling notes, so skip the ring entirely
   const np = getNotePosition(W, H);
-  if (ex.id !== 'pa-ta-ka') {
-    const ringPulse = 0.9 + Math.sin(t * 6) * 0.05;
+  const ringPulse = 0.9 + Math.sin(t * 6) * 0.05;
+  ctx.save();
+  // Outer ring
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(np.x, np.y, 52 * ringPulse, 0, Math.PI*2);
+  ctx.stroke();
+  // Inner ring colored
+  ctx.strokeStyle = ex.color + '80';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(np.x, np.y, 36, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.fillStyle = ex.color + '18';
+  ctx.beginPath();
+  ctx.arc(np.x, np.y, 36, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // For pa-ta-ka: show "說話+點這裡" hint below the ring
+  if (ex.id === 'pa-ta-ka') {
     ctx.save();
-    // Outer ring
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(np.x, np.y, 52 * ringPulse, 0, Math.PI*2);
-    ctx.stroke();
-    // Inner ring colored
-    ctx.strokeStyle = ex.color + '80';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(np.x, np.y, 36, 0, Math.PI*2);
-    ctx.stroke();
-    ctx.fillStyle = ex.color + '18';
-    ctx.beginPath();
-    ctx.arc(np.x, np.y, 36, 0, Math.PI*2);
-    ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${Math.min(W * 0.042, 16)}px 'Noto Sans TC', sans-serif`;
+    ctx.fillStyle = ex.color;
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 4;
+    ctx.fillText('說 PA·TA·KA 並點螢幕', W / 2, np.y + 62);
     ctx.restore();
   }
 
-  // PA·TA·KA special mode: large beat-light display, no falling notes
-  if (ex.id === 'pa-ta-ka') {
-    drawPatakaMode(ctx, W, H, ex, now);
-  } else {
-    // Update & draw notes (other exercises)
-    noteQueue = noteQueue.filter(note => {
-      note.update(now);
-      if (!note.isDead(now)) {
-        drawNote(note, np, W, H);
-        return true;
-      }
-      return false;
-    });
-  }
+  // Update & draw notes
+  noteQueue = noteQueue.filter(note => {
+    note.update(now);
+    if (!note.isDead(now)) {
+      drawNote(note, np, W, H);
+      return true;
+    }
+    return false;
+  });
 
   // Particles
   particles = particles.filter(p => { p.update(dt); if (!p.isDead()) { p.draw(ctx); return true; } return false; });
@@ -1211,155 +1214,6 @@ function gameRender(ts) {
   }
 
   if (!state.paused) requestAnimationFrame(gameRender);
-}
-
-// ── PA·TA·KA Beat-Light Mode ─────────────────────────────────
-// State for pa-ta-ka mode
-let patakaPhase = 0;          // 0=PA 1=TA 2=KA
-let patakaPhaseStart = 0;     // timestamp when current syllable started
-let patakaCanScore = true;    // prevent double-scoring per syllable
-let patakaBeatsTotal = 0;     // total syllables shown
-let patakaBeatsHit = 0;       // tapped syllables
-const PATAKA_SYLLABLES = ['PA', 'TA', 'KA'];
-const PATAKA_BPM = 52;        // syllable per beat
-const PATAKA_BEAT_MS = 60000 / PATAKA_BPM;
-const PATAKA_SCORE_WINDOW = PATAKA_BEAT_MS * 0.7; // 70% of beat = scoring window
-const PATAKA_TOTAL_BEATS = 90; // ~1:44 at 52bpm
-
-function initPatakaMode() {
-  patakaPhase = 0;
-  patakaPhaseStart = Date.now();
-  patakaCanScore = true;
-  patakaBeatsTotal = 0;
-  patakaBeatsHit = 0;
-}
-
-function drawPatakaMode(ctx, W, H, ex, now) {
-  // Advance phase by time
-  const elapsed = now - patakaPhaseStart;
-  if (elapsed > PATAKA_BEAT_MS) {
-    // Move to next syllable
-    patakaPhase = (patakaPhase + 1) % 3;
-    patakaPhaseStart = now;
-    patakaCanScore = true;
-    patakaBeatsTotal++;
-    // End check
-    if (patakaBeatsTotal >= PATAKA_TOTAL_BEATS) {
-      if (state.gameRunning) {
-        state.gameRunning = false;
-        setTimeout(endGame, 800);
-      }
-      return;
-    }
-    // Count as miss if not hit
-    state.totalBeats = patakaBeatsTotal;
-    playBeat();
-  }
-
-  const syllable = PATAKA_SYLLABLES[patakaPhase];
-  const progress = Math.min(elapsed / PATAKA_BEAT_MS, 1); // 0→1 within beat
-  const inWindow = elapsed < PATAKA_SCORE_WINDOW;
-
-  // Background pulse: bright when in scoring window
-  const pulseAlpha = inWindow ? (0.15 - progress * 0.1) : 0.04;
-  ctx.save();
-  ctx.globalAlpha = pulseAlpha;
-  ctx.fillStyle = ex.color;
-  ctx.fillRect(0, 0, W, H);
-  ctx.restore();
-
-  // Central big syllable card
-  const cardW = W * 0.68;
-  const cardH = H * 0.22;
-  const cardX = (W - cardW) / 2;
-  const cardY = H * 0.42;
-  const cardR = 28;
-
-  // Card background
-  ctx.save();
-  ctx.globalAlpha = inWindow ? 0.92 : 0.55;
-  ctx.fillStyle = inWindow ? ex.color : 'rgba(200,200,200,0.5)';
-  ctx.beginPath();
-  ctx.roundRect(cardX, cardY, cardW, cardH, cardR);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  // Syllable text
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `900 ${Math.min(W * 0.22, 88)}px 'Noto Sans TC', sans-serif`;
-  ctx.fillStyle = 'white';
-  ctx.shadowColor = 'rgba(0,0,0,0.2)';
-  ctx.shadowBlur = 8;
-  ctx.fillText(syllable, W / 2, cardY + cardH / 2);
-  ctx.restore();
-
-  // Three dots indicator below card
-  const dotY = cardY + cardH + 22;
-  const dotSpacing = 28;
-  const dotR = 8;
-  for (let i = 0; i < 3; i++) {
-    const dotX = W / 2 + (i - 1) * dotSpacing;
-    ctx.save();
-    ctx.globalAlpha = i === patakaPhase ? 1 : 0.3;
-    ctx.fillStyle = ex.color;
-    ctx.beginPath();
-    ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // Progress bar at bottom of card
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  ctx.fillStyle = 'white';
-  ctx.beginPath();
-  ctx.roundRect(cardX, cardY + cardH - 8, cardW * (1 - progress), 8, [0, 0, cardR, cardR]);
-  ctx.fill();
-  ctx.restore();
-
-  // Hint text
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `600 ${Math.min(W * 0.045, 17)}px 'Noto Sans TC', sans-serif`;
-  ctx.fillStyle = camActive ? 'white' : ex.color;
-  ctx.shadowColor = camActive ? 'rgba(0,0,0,0.6)' : 'transparent';
-  ctx.shadowBlur = 6;
-  ctx.globalAlpha = 0.9;
-  ctx.fillText('說出聲音並點螢幕 ✋', W / 2, cardY - 26);
-  ctx.restore();
-
-  // Score progress pill top-right area
-  const hitPct = patakaBeatsTotal > 0 ? patakaBeatsHit / patakaBeatsTotal : 0;
-  ctx.save();
-  ctx.globalAlpha = 0.8;
-  ctx.font = `600 ${Math.min(W * 0.035, 13)}px 'Noto Sans TC', sans-serif`;
-  ctx.fillStyle = camActive ? 'white' : ex.color;
-  ctx.textAlign = 'center';
-  ctx.fillText(`${patakaBeatsHit} / ${PATAKA_TOTAL_BEATS}`, W / 2, cardY + cardH + 58);
-  ctx.restore();
-}
-
-function onPatakaTap(x, y, ex) {
-  const now = Date.now();
-  const elapsed = now - patakaPhaseStart;
-  if (!patakaCanScore) return;
-  if (elapsed > PATAKA_SCORE_WINDOW) return;
-
-  patakaCanScore = false;
-  patakaBeatsHit++;
-  state.hitBeats++;
-  state.score += 50;
-  state.combo++;
-  if (state.combo > state.maxCombo) state.maxCombo = state.combo;
-  updateHUD();
-
-  const W = canvas.width, H = canvas.height;
-  addRipple(x, y, ex.color);
-  playPerfect();
-  showHitPopup('+50', W / 2, H * 0.42, ex.color);
-  spawnBurst(x, y, ex.color, 12);
 }
 
 function drawNote(note, np, W, H) {
@@ -1453,12 +1307,6 @@ function onTap(x, y) {
 
   // Ripple visual
   addRipple(x, y, state.exercise.color);
-
-  // pa-ta-ka uses its own tap logic — no noteQueue
-  if (state.exercise.id === 'pa-ta-ka') {
-    onPatakaTap(x, y, state.exercise);
-    return;
-  }
 
   // Find nearest note to hit
   let bestNote = null;
@@ -1561,8 +1409,6 @@ function startExercise(ex) {
   tongueLRLastDir = 0;
   tongueLRCooldown = 0;
   patakaMouthWasOpen = false;
-  // Initialize pa-ta-ka beat-light mode state
-  if (ex.id === 'pa-ta-ka') initPatakaMode();
   updateHUD();
 
   showScreen('game');
