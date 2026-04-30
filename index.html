@@ -1022,9 +1022,8 @@ function gameRender(ts) {
     }
   }
 
-  // Pixel-diff motion detection every 3 frames (~20fps)
+  // Motion scoring (pixel-diff runs in its own interval, not here)
   faceFrameCount++;
-  if (faceFrameCount % 3 === 0) captureMotionFrame();
   scoreMotionIfDetected();
 
   const W = canvas.width;
@@ -1245,6 +1244,7 @@ function drawNote(note, np, W, H) {
 // ── Rhythm beat scheduler ──────────────────────────────────
 let schedulerTimer = null;
 let countdownTimer = null;
+let motionTimer = null;  // pixel-diff runs at 8fps, separate from render
 let nextBeatTime = 0;
 let globalBeatIndex = 0;
 let beatPhaseIndex = 0;
@@ -1369,6 +1369,7 @@ function startExercise(ex) {
   // Clear any lingering timers to prevent overlapping runs
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
+  clearInterval(motionTimer); motionTimer = null;
 
   state.exercise = ex;
   state.score = 0;
@@ -1426,6 +1427,9 @@ function startExercise(ex) {
         gameStartTime = Date.now();
         nextBeatTime = Date.now() + 200;
         schedulerTimer = setInterval(schedulerTick, 50);
+        // Pixel-diff motion at 8fps in its own interval (doesn't touch render loop)
+        clearInterval(motionTimer);
+        motionTimer = setInterval(captureMotionFrame, 125);
       }, 600);
     }
   }, 800);
@@ -1436,6 +1440,7 @@ function endGame() {
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
+  clearInterval(motionTimer); motionTimer = null;
   playSuccess();
 
   const pct = state.totalBeats > 0 ? state.hitBeats / state.totalBeats : 0;
@@ -1523,12 +1528,15 @@ document.getElementById('btn-resume').addEventListener('click', () => {
   lastTimestamp = performance.now();
   requestAnimationFrame(gameRender);
   schedulerTimer = setInterval(schedulerTick, 50);
+  clearInterval(motionTimer);
+  motionTimer = setInterval(captureMotionFrame, 125);
 });
 
 document.getElementById('btn-quit').addEventListener('click', () => {
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
+  clearInterval(motionTimer); motionTimer = null;
   buildExerciseList();
   showScreen('select');
 });
@@ -1649,77 +1657,71 @@ function ensureMotionCanvas() {
 }
 
 function captureMotionFrame() {
-  if (!camActive || !camVideo || camVideo.readyState < 2) return;
-  if (camVideo.videoWidth === 0) return;
-  ensureMotionCanvas();
-
-  // Draw current video frame (mirror: flip horizontal to match selfie view)
-  motionCtx.save();
-  motionCtx.translate(SAMPLE_W, 0);
-  motionCtx.scale(-1, 1);
-  motionCtx.drawImage(camVideo, 0, 0, SAMPLE_W, SAMPLE_H);
-  motionCtx.restore();
-
-  // Focus on centre of frame (face region) — skip outer 20%
-  const fx = Math.floor(SAMPLE_W * 0.2);
-  const fy = Math.floor(SAMPLE_H * 0.1);
-  const fw = SAMPLE_W - fx * 2;
-  const fh = SAMPLE_H - fy * 2;
-
-  let imgData;
   try {
-    imgData = motionCtx.getImageData(fx, fy, fw, fh);
-  } catch(e) { return; } // tainted canvas (shouldn't happen with same-origin camera)
+    if (!camActive || !camVideo || camVideo.readyState < 2) return;
+    if (camVideo.videoWidth === 0 || camVideo.videoHeight === 0) return;
+    ensureMotionCanvas();
 
-  const curr = imgData.data; // RGBA flat array
-  const len  = fw * fh;     // number of pixels
-  const hh   = Math.floor(fh / 2);
-  const hw   = Math.floor(fw / 2);
+    // Draw current video frame
+    motionCtx.drawImage(camVideo, 0, 0, SAMPLE_W, SAMPLE_H);
 
-  if (!prevFrame || prevFrame.length !== curr.length) {
-    prevFrame = new Uint8ClampedArray(curr);
-    return; // need at least 2 frames
-  }
-
-  // Compute per-pixel luminance diff across all regions
-  let sumAll = 0, sumTop = 0, sumBot = 0, sumL = 0, sumR = 0;
-  let cntAll = 0, cntTop = 0, cntBot = 0, cntL = 0, cntR = 0;
-
-  for (let py = 0; py < fh; py++) {
-    for (let px = 0; px < fw; px++) {
-      const i = (py * fw + px) * 4;
-      // Luminance (quick approx)
-      const cLum = (curr[i] * 77 + curr[i+1] * 150 + curr[i+2] * 29) >> 8;
-      const pLum = (prevFrame[i] * 77 + prevFrame[i+1] * 150 + prevFrame[i+2] * 29) >> 8;
-      const d = Math.abs(cLum - pLum) / 255;
-
-      sumAll += d; cntAll++;
-      if (py < hh)  { sumTop += d; cntTop++; }
-      else          { sumBot += d; cntBot++; }
-      if (px < hw)  { sumL   += d; cntL++;   }
-      else          { sumR   += d; cntR++;   }
+    // Read pixels — may throw SecurityError on some browsers; we catch it
+    let imgData;
+    try {
+      imgData = motionCtx.getImageData(0, 0, SAMPLE_W, SAMPLE_H);
+    } catch(e) {
+      // Cross-origin or tainted canvas — disable pixel diff silently
+      prevFrame = null;
+      return;
     }
+
+    const curr = imgData.data;
+    const fw = SAMPLE_W;
+    const fh = SAMPLE_H;
+    const hh = Math.floor(fh / 2);
+    const hw = Math.floor(fw / 2);
+
+    if (!prevFrame || prevFrame.length !== curr.length) {
+      prevFrame = new Uint8ClampedArray(curr);
+      return;
+    }
+
+    let sumAll = 0, sumBot = 0, sumL = 0, sumR = 0;
+    let cnt = fw * fh;
+
+    for (let py = 0; py < fh; py++) {
+      for (let px = 0; px < fw; px++) {
+        const i = (py * fw + px) * 4;
+        const cLum = (curr[i] * 77 + curr[i+1] * 150 + curr[i+2] * 29) >> 8;
+        const pLum = (prevFrame[i] * 77 + prevFrame[i+1] * 150 + prevFrame[i+2] * 29) >> 8;
+        const d = Math.abs(cLum - pLum) / 255;
+        sumAll += d;
+        if (py >= hh) sumBot += d;
+        if (px < hw)  sumL   += d;
+        else          sumR   += d;
+      }
+    }
+
+    const raw    = sumAll / cnt;
+    const rawBot = sumBot / (cnt / 2);
+    const rawL   = sumL   / (cnt / 2);
+    const rawR   = sumR   / (cnt / 2);
+
+    const A = 0.4;
+    smoothDiff    = smoothDiff    * (1-A) + raw    * A;
+    smoothDiffBot = smoothDiffBot * (1-A) + rawBot * A;
+    smoothDiffL   = smoothDiffL   * (1-A) + rawL   * A;
+    smoothDiffR   = smoothDiffR   * (1-A) + rawR   * A;
+
+    motionDiff    = smoothDiff;
+    motionDiffBot = smoothDiffBot;
+    motionDiffL   = smoothDiffL;
+    motionDiffR   = smoothDiffR;
+
+    prevFrame.set(curr);
+  } catch(e) {
+    // Never let motion detection crash the render loop
   }
-
-  const raw     = cntAll > 0 ? sumAll / cntAll : 0;
-  const rawBot  = cntBot > 0 ? sumBot / cntBot : 0;
-  const rawL    = cntL   > 0 ? sumL   / cntL   : 0;
-  const rawR    = cntR   > 0 ? sumR   / cntR   : 0;
-
-  // Exponential smoothing (α=0.4) to reduce noise
-  const A = 0.4;
-  smoothDiff    = smoothDiff    * (1-A) + raw    * A;
-  smoothDiffBot = smoothDiffBot * (1-A) + rawBot * A;
-  smoothDiffL   = smoothDiffL   * (1-A) + rawL   * A;
-  smoothDiffR   = smoothDiffR   * (1-A) + rawR   * A;
-
-  motionDiff    = smoothDiff;
-  motionDiffBot = smoothDiffBot;
-  motionDiffL   = smoothDiffL;
-  motionDiffR   = smoothDiffR;
-
-  // Save frame
-  prevFrame.set(curr);
 }
 
 // Per-exercise motion detector — returns true if action detected
