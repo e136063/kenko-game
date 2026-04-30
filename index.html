@@ -1766,7 +1766,7 @@ function scoreMotionIfDetected() {
   if (ex.id === 'pa-ta-ka') return;
 
   if (checkMotion(ex)) {
-    const pts = 20;
+    const pts = 5;
     state.score += pts;
     state.hitBeats++;
     hudScore.textContent = Math.floor(state.score);
