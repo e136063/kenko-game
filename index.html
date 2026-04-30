@@ -1004,8 +1004,8 @@ function drawFace(ctx, cx, cy, r, ex, beatPhase) {
 
 // ── Note zone ─────────────────────────────────────────────
 function getNotePosition(W, H) {
-  // Bottom center — tap zone
-  return { x: W / 2, y: H * 0.82 };
+  // Bottom center — tap zone (above dark band)
+  return { x: W / 2, y: H * 0.80 };
 }
 
 // ── Game rendering ─────────────────────────────────────────
@@ -1049,8 +1049,8 @@ function gameRender(ts) {
     ctx.restore();
     // Dark bands top and bottom (no gradient object needed each frame)
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.fillRect(0, 0, W, H * 0.22);
-    ctx.fillRect(0, H * 0.78, W, H * 0.22);
+    ctx.fillRect(0, 0, W, H * 0.18);
+    ctx.fillRect(0, H * 0.88, W, H * 0.12);
   } else {
     ctx.fillStyle = ex.bg;
     ctx.fillRect(0, 0, W, H);
@@ -1085,26 +1085,26 @@ function gameRender(ts) {
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // Draw face — bottom-left corner as guide character when camera active
-  const faceR  = camActive ? Math.min(W, H) * 0.14 : Math.min(W, H) * 0.24;
-  const faceCX = camActive ? W * 0.22  : W / 2;
-  const faceCY = camActive ? H * 0.72  : H * 0.40;
+  // Draw face — top-left corner as guide character when camera active (keep away from hit ring)
+  const faceR  = camActive ? Math.min(W, H) * 0.11 : Math.min(W, H) * 0.24;
+  const faceCX = camActive ? W * 0.18  : W / 2;
+  const faceCY = camActive ? H * 0.30  : H * 0.40;
   drawFace(ctx, faceCX, faceCY, faceR, ex, beatT);
 
   // Face bubble label when camera active
   if (camActive) {
-    // Speech bubble background
-    const bubbleW = Math.min(W * 0.38, 130);
-    const bubbleH = 28;
-    const bubbleX = faceCX + faceR + 8;
+    // Speech bubble to the right of face
+    const bubbleW = Math.min(W * 0.42, 140);
+    const bubbleH = 26;
+    const bubbleX = faceCX + faceR + 6;
     const bubbleY = faceCY - bubbleH / 2;
     ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
     ctx.beginPath();
     ctx.roundRect(bubbleX, bubbleY, bubbleW, bubbleH, 10);
     ctx.fill();
     ctx.textAlign = 'center';
-    ctx.font = `600 ${Math.min(W * 0.038, 14)}px 'Noto Sans TC', sans-serif`;
+    ctx.font = `600 ${Math.min(W * 0.038, 13)}px 'Noto Sans TC', sans-serif`;
     ctx.fillStyle = ex.color;
     ctx.fillText(ex.instruction, bubbleX + bubbleW / 2, faceCY + 1);
     ctx.restore();
