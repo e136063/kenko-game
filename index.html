@@ -1015,9 +1015,16 @@ function gameRender(ts) {
   const dt = Math.min((ts - lastTimestamp) / 1000, 0.05);
   lastTimestamp = ts;
 
-  // Keep camera video playing (iOS Safari may pause it in background)
-  if (camActive && camVideo && camVideo.paused) {
-    camVideo.play().catch(() => {});
+  // Keep camera video playing (iOS Safari may pause it)
+  if (camActive && camVideo) {
+    if (camVideo.paused || camVideo.ended) {
+      camVideo.play().catch(() => {});
+    }
+    // If readyState dropped, treat as frozen — hide cam briefly to reset
+    if (camVideo.readyState < 2 && faceFrameCount % 180 === 0) {
+      camVideo.load();
+      camVideo.play().catch(() => {});
+    }
   }
 
   // Face detection every 6 frames (~10fps on 60fps screen)
@@ -1724,12 +1731,28 @@ function onFaceResults(results) {
 
 // Run face detection on a frame (called from gameRender every ~3 frames)
 let faceFrameCount = 0;
+let faceDetectTimeout = null;
 async function detectFaceFrame() {
   if (!faceMesh || !camVideo || camVideo.readyState < 2) return;
-  if (faceDetecting) return;
+  if (faceDetecting) {
+    // Safety: if stuck for >2s, force-reset
+    if (!faceDetectTimeout) {
+      faceDetectTimeout = setTimeout(() => {
+        faceDetecting = false;
+        faceDetectTimeout = null;
+      }, 2000);
+    }
+    return;
+  }
   faceDetecting = true;
+  clearTimeout(faceDetectTimeout);
+  faceDetectTimeout = null;
   try {
-    await faceMesh.send({ image: camVideo });
+    // Race: if faceMesh.send hangs, resolve after 1.5s
+    await Promise.race([
+      faceMesh.send({ image: camVideo }),
+      new Promise(resolve => setTimeout(resolve, 1500))
+    ]);
   } catch(e) {}
   faceDetecting = false;
 }
