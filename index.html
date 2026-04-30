@@ -1405,33 +1405,35 @@ function startExercise(ex) {
     startCamera();
   }
 
-  // Start canvas render loop and countdown
-  let count = 3;
+  // Start canvas render loop and rAF-based countdown (no setInterval — more reliable on iOS)
   showingCountdown = true;
-  countdownVal = count;
+  countdownVal = 3;
   state.gameRunning = true;
   lastTimestamp = performance.now();
   gameStartTime = Date.now() + 3200;
   requestAnimationFrame(gameRender);
 
-  countdownTimer = setInterval(() => {
-    count--;
-    if (count > 0) {
-      countdownVal = count;
-      playBeat();
-    } else {
-      countdownVal = 0;
-      clearInterval(countdownTimer); countdownTimer = null;
+  // Countdown using nested setTimeout (more reliable than setInterval on iOS Safari)
+  playBeat();
+  setTimeout(() => {
+    countdownVal = 2; playBeat();
+    setTimeout(() => {
+      countdownVal = 1; playBeat();
       setTimeout(() => {
-        showingCountdown = false;
-        gameStartTime = Date.now();
-        nextBeatTime = Date.now() + 200;
-        schedulerTimer = setInterval(schedulerTick, 50);
-        // Pixel-diff motion at 8fps in its own interval (doesn't touch render loop)
-        clearInterval(motionTimer);
-        motionTimer = setInterval(captureMotionFrame, 125);
-      }, 600);
-    }
+        countdownVal = 0;
+        setTimeout(() => {
+          showingCountdown = false;
+          gameStartTime = Date.now();
+          nextBeatTime = Date.now() + 200;
+          // Start scheduler
+          clearInterval(schedulerTimer);
+          schedulerTimer = setInterval(schedulerTick, 50);
+          // Pixel-diff motion at 8fps
+          clearInterval(motionTimer);
+          motionTimer = setInterval(captureMotionFrame, 125);
+        }, 600);
+      }, 800);
+    }, 800);
   }, 800);
 }
 
