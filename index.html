@@ -1184,17 +1184,30 @@ function gameRender(ts) {
     return false;
   });
 
-  // Countdown
+  // Countdown — driven by timestamp, no setTimeout needed
   if (showingCountdown) {
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `900 ${W * 0.25}px 'Noto Sans TC', sans-serif`;
-    ctx.fillStyle = ex.color;
-    ctx.globalAlpha = 0.85;
-    ctx.fillText(countdownVal > 0 ? countdownVal : '開始！', W/2, H/2);
-    ctx.globalAlpha = 1;
-    ctx.restore();
+    const msLeft = gameStartTime - now;
+    if (msLeft <= 0) {
+      // Countdown finished
+      showingCountdown = false;
+      countdownVal = 0;
+    } else {
+      // 3s countdown: 3000-2001ms=3, 2000-1001ms=2, 1000-1ms=1
+      const newVal = Math.ceil(msLeft / 1000);
+      if (newVal !== countdownVal) {
+        countdownVal = newVal;
+        playBeat();
+      }
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `900 ${W * 0.25}px 'Noto Sans TC', sans-serif`;
+      ctx.fillStyle = ex.color;
+      ctx.globalAlpha = 0.85;
+      ctx.fillText(countdownVal, W/2, H/2);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
   }
 
   if (!state.paused) requestAnimationFrame(gameRender);
@@ -1405,36 +1418,21 @@ function startExercise(ex) {
     startCamera();
   }
 
-  // Start canvas render loop and rAF-based countdown (no setInterval — more reliable on iOS)
+  // Countdown is handled inside gameRender using timestamps — no setTimeout/setInterval needed
   showingCountdown = true;
   countdownVal = 3;
   state.gameRunning = true;
   lastTimestamp = performance.now();
-  gameStartTime = Date.now() + 3200;
+  // gameStartTime = when countdown ends (3 seconds from now)
+  gameStartTime = Date.now() + 3000;
+  nextBeatTime = gameStartTime + 200;
   requestAnimationFrame(gameRender);
 
-  // Countdown using nested setTimeout (more reliable than setInterval on iOS Safari)
-  playBeat();
-  setTimeout(() => {
-    countdownVal = 2; playBeat();
-    setTimeout(() => {
-      countdownVal = 1; playBeat();
-      setTimeout(() => {
-        countdownVal = 0;
-        setTimeout(() => {
-          showingCountdown = false;
-          gameStartTime = Date.now();
-          nextBeatTime = Date.now() + 200;
-          // Start scheduler
-          clearInterval(schedulerTimer);
-          schedulerTimer = setInterval(schedulerTick, 50);
-          // Pixel-diff motion at 8fps
-          clearInterval(motionTimer);
-          motionTimer = setInterval(captureMotionFrame, 125);
-        }, 600);
-      }, 800);
-    }, 800);
-  }, 800);
+  // Start scheduler & motionTimer immediately — scheduler won't produce notes until nextBeatTime
+  clearInterval(schedulerTimer);
+  schedulerTimer = setInterval(schedulerTick, 50);
+  clearInterval(motionTimer);
+  motionTimer = setInterval(captureMotionFrame, 125);
 }
 
 // ── End game ───────────────────────────────────────────────
