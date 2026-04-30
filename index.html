@@ -1025,6 +1025,28 @@ function gameRender(ts) {
   // Scheduler tick — run every frame via rAF (setInterval is throttled on iOS with camera)
   if (!showingCountdown) schedulerTick();
 
+  // Consume beat events — no setTimeout, purely timestamp-driven
+  if (!showingCountdown && beatEventQueue.length > 0) {
+    const nowBeat = Date.now();
+    let i = 0;
+    while (i < beatEventQueue.length && beatEventQueue[i].time <= nowBeat) {
+      const ev = beatEventQueue[i];
+      faceAnim.phase = ev.phase;
+      playBeat();
+      state.totalBeats++;
+      i++;
+    }
+    if (i > 0) beatEventQueue.splice(0, i);
+  }
+
+  // End-of-game check — replaces setTimeout(endGame, 1000) in schedulerTick
+  if (gameEndAt > 0 && Date.now() >= gameEndAt && state.gameRunning) {
+    gameEndAt = 0;
+    state.gameRunning = false;
+    endGame();
+    return;
+  }
+
   // Motion scoring
   faceFrameCount++;
   scoreMotionIfDetected();
@@ -1264,6 +1286,8 @@ let motionTimer = null;  // pixel-diff runs at 8fps, separate from render
 let nextBeatTime = 0;
 let globalBeatIndex = 0;
 let beatPhaseIndex = 0;
+let beatEventQueue = [];   // {time, phase} — consumed in gameRender, no setTimeout
+let gameEndAt = 0;         // timestamp to call endGame (replaces setTimeout in scheduler)
 
 function schedulerTick() {
   if (!state.gameRunning || state.paused) return;
@@ -1273,23 +1297,14 @@ function schedulerTick() {
 
   while (nextBeatTime < now + 800) {
     if (globalBeatIndex >= ex.totalBeats) {
-      // End game — use flag to prevent re-entry
-      if (state.gameRunning) { state.gameRunning = false; setTimeout(endGame, 1000); }
+      // Schedule end-of-game — handled in gameRender, no setTimeout
+      if (gameEndAt === 0) gameEndAt = nextBeatTime + 1000;
       return;
     }
-    // Queue note
+    // Queue note for rhythm tap
     noteQueue.push(new Note(nextBeatTime - 900, globalBeatIndex, beatPhaseIndex, ex));
-    // Update face phase on beat
-    const capturedBeat = nextBeatTime;
-    const capturedPhase = beatPhaseIndex;
-    const delay = nextBeatTime - now;
-    setTimeout(() => {
-      if (state.gameRunning) {
-        faceAnim.phase = capturedPhase;
-        playBeat();
-        state.totalBeats++;
-      }
-    }, Math.max(0, delay));
+    // Push beat event — consumed in gameRender via timestamp (no setTimeout)
+    beatEventQueue.push({ time: nextBeatTime, phase: beatPhaseIndex });
 
     globalBeatIndex++;
     beatPhaseIndex = (beatPhaseIndex + 1) % ex.phases.length;
@@ -1396,6 +1411,8 @@ function startExercise(ex) {
   state.gameRunning = false;
   state.paused = false;
   noteQueue = [];
+  beatEventQueue = [];
+  gameEndAt = 0;
   particles = [];
   hitPopups = [];
   globalBeatIndex = 0;
