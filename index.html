@@ -1316,48 +1316,8 @@ function schedulerTick() {
 function onTap(x, y) {
   if (!state.gameRunning || state.paused || showingCountdown) return;
   ensureAudio();
-
-  const now = Date.now();
-  const np = getNotePosition(canvas.width, canvas.height);
-
-  // Ripple visual
+  // Ripple visual only — tap no longer scores points
   addRipple(x, y, state.exercise.color);
-
-  // Find nearest note to hit
-  let bestNote = null;
-  let bestDiff = Infinity;
-  for (const note of noteQueue) {
-    if (note.hit || note.missed) continue;
-    const diff = Math.abs(now - note.hitTime);
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      bestNote = note;
-    }
-  }
-
-  if (bestNote && bestDiff <= TIMING.good) {
-    bestNote.hit = true;
-    state.hitBeats++;
-    if (bestDiff <= TIMING.perfect) {
-      state.perfectBeats++;
-      state.score += SCORE_PERFECT * (1 + Math.floor(state.combo / 5) * 0.5);
-      state.combo++;
-      if (state.combo > state.maxCombo) state.maxCombo = state.combo;
-      if (state.combo >= 5) { playCombo(state.combo); } else { playPerfect(); }
-      showHitPopup('完美！', np.x, np.y, '#FF6B35');
-      spawnBurst(np.x, np.y, state.exercise.color, 16);
-    } else {
-      state.score += SCORE_GOOD * (1 + Math.floor(state.combo / 5) * 0.3);
-      state.combo++;
-      if (state.combo > state.maxCombo) state.maxCombo = state.combo;
-      playGood();
-      showHitPopup('Good！', np.x, np.y, '#4ECDC4');
-      spawnBurst(np.x, np.y, '#4ECDC4', 8);
-    }
-    updateHUD();
-  } else {
-    // Extra tap — no penalty but no points
-  }
 }
 
 function onMiss() {
