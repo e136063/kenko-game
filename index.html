@@ -572,10 +572,10 @@ const EXERCISES = [
     icon: '🗣️',
     color: '#F7B731',
     bg: '#FFFBE8',
-    bpm: 52,
-    totalBeats: 86,
-    instruction: '啪→他→卡',
-    phases: ['啪 (PA)', '他 (TA)', '卡 (KA)'],
+    bpm: 60,
+    totalBeats: 90,
+    instruction: '說 PA·TA·KA 並點螢幕',
+    phases: ['PA·TA·KA'],
     faceStyle: 'speak',
   },
 ];
@@ -587,9 +587,9 @@ const RATINGS = [
 ];
 
 const TIMING = {
-  perfect: 160,  // ms window for PERFECT
-  good: 260,     // ms window for GOOD
-  miss: 300,     // miss after this ms
+  perfect: 200,  // ms window for PERFECT
+  good: 380,     // ms window for GOOD (wider = easier to tap)
+  miss: 450,     // miss after this ms
 };
 const SCORE_PERFECT = 100;
 const SCORE_GOOD = 60;
@@ -729,7 +729,7 @@ let beatCount = 0;
 class Note {
   constructor(spawnTime, beatIndex, phaseIndex, ex) {
     this.spawnTime = spawnTime;
-    this.hitTime = spawnTime + 700; // notes travel for 700ms
+    this.hitTime = spawnTime + 900; // notes travel for 900ms
     this.beatIndex = beatIndex;
     this.phaseIndex = phaseIndex;
     this.ex = ex;
@@ -745,7 +745,7 @@ class Note {
     const age = now - this.spawnTime;
     const travel = now - this.hitTime;
     // Scale: grow as approaches
-    const progress = Math.min(age / 700, 1);
+    const progress = Math.min(age / 900, 1);
     this.scale = 0.3 + 0.7 * progress;
     this.alpha = progress < 0.2 ? progress / 0.2 : 1;
     if (this.hit) {
@@ -1261,7 +1261,7 @@ function schedulerTick() {
       return;
     }
     // Queue note
-    noteQueue.push(new Note(nextBeatTime - 700, globalBeatIndex, beatPhaseIndex, ex));
+    noteQueue.push(new Note(nextBeatTime - 900, globalBeatIndex, beatPhaseIndex, ex));
     // Update face phase on beat
     const capturedBeat = nextBeatTime;
     const capturedPhase = beatPhaseIndex;
