@@ -1415,12 +1415,15 @@ function startExercise(ex) {
   // motionTimer for pixel-diff (low priority, 8fps is fine)
   clearInterval(motionTimer);
   motionTimer = setInterval(captureMotionFrame, 125);
+  // Start mic for pa-ta-ka
+  if (ex.id === 'pa-ta-ka' && !micActive) startMic();
   // schedulerTimer no longer needed — schedulerTick runs inside gameRender via rAF
   clearInterval(schedulerTimer); schedulerTimer = null;
 }
 
 // ── End game ───────────────────────────────────────────────
 function endGame() {
+  stopMic();
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
@@ -1520,6 +1523,7 @@ document.getElementById('btn-quit').addEventListener('click', () => {
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
   clearInterval(motionTimer); motionTimer = null;
+  stopMic();
   endGame();
 });
 
@@ -1579,6 +1583,29 @@ async function startCamera() {
   }
 }
 
+async function startMic() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const micCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx) audioCtx = micCtx;
+    const source = micCtx.createMediaStreamSource(micStream);
+    micAnalyser = micCtx.createAnalyser();
+    micAnalyser.fftSize = 256;
+    source.connect(micAnalyser);
+    micActive = true;
+  } catch(e) {
+    console.warn('Mic unavailable:', e);
+    micActive = false;
+  }
+}
+
+function stopMic() {
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  micAnalyser = null;
+  micActive = false;
+  micVolume = 0;
+}
+
 function stopCamera() {
   if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
   camVideo.srcObject = null;
@@ -1623,6 +1650,13 @@ let tongueLRCooldown = 0;
 
 // pa-ta-ka: open/close cycle
 let patakaMouthWasOpen = false;
+
+// ── Microphone (pa-ta-ka only) ───────────────────────────────
+let micStream = null;
+let micAnalyser = null;
+let micActive = false;
+let micVolume = 0;      // 0..1, updated in captureMotionFrame
+const MIC_THRESHOLD = 0.18;  // volume above this = "spoke"
 
 // Motion smoothing
 let smoothDiff = 0;
@@ -1766,8 +1800,20 @@ function scoreMotionIfDetected() {
 
   const ex = state.exercise;
   if (!ex) return;
-  // pa-ta-ka uses tap input, not camera motion
-  if (ex.id === 'pa-ta-ka') return;
+  // pa-ta-ka scores via microphone volume, not camera pixel-diff
+  if (ex.id === 'pa-ta-ka') {
+    if (!micActive || micVolume < MIC_THRESHOLD) return;
+    const pts = 5;
+    state.score += pts;
+    state.hitBeats++;
+    hudScore.textContent = Math.floor(state.score);
+    motionCooldown = now + 600;
+    const np = getNotePosition(canvas.width, canvas.height);
+    hitPopups.push({ x: np.x, y: np.y - 30, text: '+5', color: ex.color, t: 0, maxT: 0.8 });
+    spawnBurst(np.x, np.y, ex.color, 8);
+    updateHUD();
+    return;
+  }
 
   if (checkMotion(ex)) {
     const pts = 5;
