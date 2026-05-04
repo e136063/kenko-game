@@ -574,7 +574,7 @@ const EXERCISES = [
     bg: '#FFFBE8',
     bpm: 60,
     totalBeats: 90,
-    instruction: '說 PA·TA·KA 並點螢幕',
+    instruction: '清楚說出 啪、他、卡',
     phases: ['PA·TA·KA'],
     faceStyle: 'speak',
   },
@@ -1168,7 +1168,7 @@ function gameRender(ts) {
   ctx.fill();
   ctx.restore();
 
-  // For pa-ta-ka: show "說話+點這裡" hint below the ring
+  // For pa-ta-ka: show voice hint below the ring
   if (ex.id === 'pa-ta-ka') {
     ctx.save();
     ctx.textAlign = 'center';
@@ -1176,7 +1176,7 @@ function gameRender(ts) {
     ctx.fillStyle = ex.color;
     ctx.shadowColor = 'rgba(0,0,0,0.4)';
     ctx.shadowBlur = 4;
-    ctx.fillText('說 PA·TA·KA 並點螢幕', W / 2, np.y + 62);
+    ctx.fillText('清楚說出 PA · TA · KA', W / 2, np.y + 62);
     ctx.restore();
   }
 
@@ -1871,7 +1871,7 @@ function scoreMotionIfDetected() {
     const np = getNotePosition(canvas.width, canvas.height);
     hitPopups.push({
       x: np.x, y: np.y - 30,
-      text: '+20',
+      text: '+5',
       color: ex.color,
       t: 0, maxT: 0.8
     });
