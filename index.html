@@ -1789,7 +1789,7 @@ function checkMotion(ex) {
       // Complete action = tongue extends (motionDiff spike HIGH) then retracts (drops back LOW)
       // Phase 0 → 1: wait for big extension spike
       if (tongueFBPhase === 0) {
-        if (motionDiff > 0.013) {         // clear tongue extension
+        if (motionDiff > 0.020) {         // clear tongue extension
           tongueFBPhase = 1;
           tongueFBPeak  = motionDiff;
         }
@@ -1812,7 +1812,7 @@ function checkMotion(ex) {
       // Same two-phase as tongue-fb: extend (motionDiff spike) → retract (drop to rest) = score
       // Asymmetry detection is unreliable on front camera; overall diff works better
       if (tongueLRPhase === 0) {
-        if (motionDiff > 0.013) {
+        if (motionDiff > 0.020) {
           tongueLRPhase = 1;
         }
         return false;
@@ -1829,13 +1829,13 @@ function checkMotion(ex) {
     case 'lip': {
       // Complete action = mouth opens wide (bot spike) then closes back
       if (lipPhase === 0) {
-        if (motionDiffBot > 0.013) {      // clear lip pout or wide open
+        if (motionDiffBot > 0.025) {      // clear lip pout or wide open
           lipPhase = 1;
         }
         return false;
       }
       if (lipPhase === 1) {
-        if (motionDiffBot < 0.016) {      // back to rest = mouth closed
+        if (motionDiffBot < 0.013) {      // back to rest = mouth closed
           lipPhase = 0;
           return true;                    // ✓ complete open→close cycle
         }
@@ -1844,7 +1844,7 @@ function checkMotion(ex) {
     }
 
     default:
-      return motionDiff > 0.013;
+      return motionDiff > 0.020;
   }
 }
 
