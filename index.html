@@ -1036,6 +1036,12 @@ function gameRender(ts) {
       faceAnim.phase = ev.phase;
       playBeat();
       state.totalBeats++;
+      // PA·TA·KA: open a scoring window for this beat (800ms)
+      if (state.exercise && state.exercise.id === 'pa-ta-ka') {
+        patakaBeatWindowEnd = Date.now() + 800;
+        patakaBeatScored = false;
+        patakaMouthWasOpen = false;
+      }
       i++;
     }
     if (i > 0) beatEventQueue.splice(0, i);
@@ -1386,6 +1392,8 @@ function startExercise(ex) {
   tongueLRPhase = 0;
   lipPhase = 0;
   patakaMouthWasOpen = false;
+  patakaBeatWindowEnd = 0;
+  patakaBeatScored = false;
   updateHUD();
 
   showScreen('game');
@@ -1656,6 +1664,8 @@ let lipPhase = 0;           // 0=idle, 1=opened
 
 // pa-ta-ka: open/close cycle
 let patakaMouthWasOpen = false;
+let patakaBeatWindowEnd = 0;  // timestamp — mic scoring only allowed within this window
+let patakaBeatScored = false; // only one score per beat
 
 // ── Microphone (pa-ta-ka only) ───────────────────────────────
 let micStream = null;
@@ -1825,26 +1835,27 @@ function scoreMotionIfDetected() {
 
   const ex = state.exercise;
   if (!ex) return;
-  // pa-ta-ka scores via microphone — complete syllable = loud then quiet
+  // pa-ta-ka scores via microphone — one score per beat window
   if (ex.id === 'pa-ta-ka') {
     if (!micActive) return;
-    // Two-phase: 0=waiting for sound, 1=heard sound, waiting for silence
+    // Must be within the current beat's scoring window
+    if (now > patakaBeatWindowEnd) return;
+    // Already scored this beat
+    if (patakaBeatScored) return;
+    // Two-phase: wait for loud → then quiet = complete syllable
     if (!patakaMouthWasOpen) {
-      // Phase 0: waiting for a clear vocalization
       if (micVolume < MIC_THRESHOLD) return;
-      patakaMouthWasOpen = true;  // reuse flag for mic "was speaking"
+      patakaMouthWasOpen = true;
       return;
     } else {
-      // Phase 1: heard sound, wait for it to drop back to silence
       if (micVolume > 0.04) return;  // still speaking
       patakaMouthWasOpen = false;
-      if (now < motionCooldown) return;
     }
-    const pts = 5;
-    state.score += pts;
+    // Score this beat
+    patakaBeatScored = true;
+    state.score += 5;
     state.hitBeats++;
     hudScore.textContent = Math.floor(state.score);
-    motionCooldown = now + 600;
     const np = getNotePosition(canvas.width, canvas.height);
     hitPopups.push({ x: np.x, y: np.y - 30, text: '+5', color: ex.color, t: 0, maxT: 0.8 });
     spawnBurst(np.x, np.y, ex.color, 8);
