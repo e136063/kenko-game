@@ -1142,7 +1142,7 @@ function gameRender(ts) {
     ctx.textAlign = 'center';
     ctx.font = `500 ${Math.min(W * 0.045, 18)}px 'Noto Sans TC', sans-serif`;
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillText(ex.instruction, W / 2, H * 0.635);
+    ctx.fillText(ex.instruction, W / 2, H * 0.68);
     ctx.restore();
   }
 
@@ -1168,17 +1168,7 @@ function gameRender(ts) {
   ctx.fill();
   ctx.restore();
 
-  // For pa-ta-ka: show voice hint below the ring
-  if (ex.id === 'pa-ta-ka') {
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.font = `bold ${Math.min(W * 0.042, 16)}px 'Noto Sans TC', sans-serif`;
-    ctx.fillStyle = ex.color;
-    ctx.shadowColor = 'rgba(0,0,0,0.4)';
-    ctx.shadowBlur = 4;
-    ctx.fillText('清楚說出 PA · TA · KA', W / 2, np.y + 62);
-    ctx.restore();
-  }
+  // pa-ta-ka hint is shown via instruction text — no extra label needed
 
   // Update & draw notes
   noteQueue = noteQueue.filter(note => {
