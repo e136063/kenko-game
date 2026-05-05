@@ -581,9 +581,10 @@ const EXERCISES = [
 ];
 
 const RATINGS = [
-  { label: '完美！', min: 0.85, stars: 3, msg: '真的很棒！口腔肌肉越練越靈活，繼續保持！' },
-  { label: '很好！', min: 0.65, stars: 2, msg: '做得不錯！每天練習，吞嚥更安全健康！' },
-  { label: '繼續加油！', min: 0, stars: 1, msg: '沒關係，多練幾次就會更順手了！加油！' },
+  { label: '完美！', min: 100, stars: 3, msg: '真的很棒！口腔肌肉越練越靈活，繼續保持！' },
+  { label: '很好！', min: 80, stars: 2, msg: '做得不錯！每天練習，吞嚥更安全健康！' },
+  { label: '繼續加油！', min: 50, stars: 1, msg: '沒關係，多練幾次就會更順手了！加油！' },
+  { label: '繼續加油！', min: 0, stars: 0, msg: '沒關係，多練幾次就會更順手了！加油！' },
 ];
 
 const TIMING = {
@@ -1423,8 +1424,8 @@ function endGame() {
   clearInterval(motionTimer); motionTimer = null;
   playSuccess();
 
-  const pct = state.totalBeats > 0 ? state.hitBeats / state.totalBeats : 0;
-  const rating = RATINGS.find(r => pct >= r.min) || RATINGS[RATINGS.length - 1];
+  const finalScore = Math.floor(state.score);
+  const rating = RATINGS.find(r => finalScore >= r.min) || RATINGS[RATINGS.length - 1];
 
   // Stars display
   const stars = rating.stars;
