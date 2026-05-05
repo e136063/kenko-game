@@ -1418,9 +1418,11 @@ function startExercise(ex) {
   nextBeatTime = gameStartTime + 200;
   requestAnimationFrame(gameRender);
 
-  // motionTimer for pixel-diff (low priority, 8fps is fine)
+  // motionTimer for pixel-diff — delay 300ms to let game render settle first
   clearInterval(motionTimer);
-  motionTimer = setInterval(captureMotionFrame, 125);
+  setTimeout(() => {
+    motionTimer = setInterval(captureMotionFrame, 200); // 5fps — enough for detection, less jank
+  }, 300);
   // Start mic for pa-ta-ka
   if (ex.id === 'pa-ta-ka' && !micActive) startMic();
   // schedulerTimer no longer needed — schedulerTick runs inside gameRender via rAF
@@ -1524,7 +1526,7 @@ document.getElementById('btn-resume').addEventListener('click', () => {
   lastTimestamp = performance.now();
   requestAnimationFrame(gameRender);
   clearInterval(motionTimer);
-  motionTimer = setInterval(captureMotionFrame, 125);
+  motionTimer = setInterval(captureMotionFrame, 200);
 });
 
 document.getElementById('btn-quit').addEventListener('click', () => {
@@ -1644,8 +1646,8 @@ let motionCooldown = 0;       // timestamp
 let faceFrameCount = 0;
 
 // Offscreen canvas for pixel sampling
-const SAMPLE_W = 80;  // small for speed
-const SAMPLE_H = 60;
+const SAMPLE_W = 60;  // small for speed
+const SAMPLE_H = 45;
 let motionCanvas = null;
 let motionCtx = null;
 let prevFrame = null;  // Uint8ClampedArray of previous frame
