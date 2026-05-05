@@ -416,7 +416,10 @@
       <span class="hud-value" id="hud-score">0</span>
     </div>
     <button id="btn-pause">⏸</button>
-
+  <div id="debug-panel" style="position:absolute;top:56px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;font-size:11px;padding:5px 12px;border-radius:8px;text-align:center;pointer-events:none;font-family:monospace;z-index:999;min-width:230px;display:none;">
+    diff:<span id="dbg-diff">0</span> bot:<span id="dbg-bot">0</span> mic:<span id="dbg-mic">0</span><br>
+    phase:<span id="dbg-phase">-</span>
+  </div>
   </div>
 
   <!-- Title Screen -->
@@ -1397,6 +1400,7 @@ function startExercise(ex) {
   updateHUD();
 
   showScreen('game');
+  const _dpShow = document.getElementById('debug-panel'); if(_dpShow) _dpShow.style.display='block';
   // Camera should already be active (started at title screen)
   // If not yet active, try again now
   if (!camActive && !camAsked) {
@@ -1426,6 +1430,7 @@ function startExercise(ex) {
 // ── End game ───────────────────────────────────────────────
 function endGame() {
   stopMic();
+  const _dpHide = document.getElementById('debug-panel'); if(_dpHide) _dpHide.style.display='none';
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
@@ -1749,6 +1754,22 @@ function captureMotionFrame() {
     motionDiffBot = smoothDiffBot;
     motionDiffL   = smoothDiffL;
     motionDiffR   = smoothDiffR;
+
+    // Debug panel update
+    const _dp = document.getElementById('debug-panel');
+    if (_dp && _dp.style.display !== 'none') {
+      const _d = document.getElementById('dbg-diff');  if(_d) _d.textContent = motionDiff.toFixed(3);
+      const _b = document.getElementById('dbg-bot');   if(_b) _b.textContent = motionDiffBot.toFixed(3);
+      const _m = document.getElementById('dbg-mic');   if(_m) _m.textContent = micVolume.toFixed(3);
+      const _p = document.getElementById('dbg-phase'); if(_p) {
+        const _ex = state.exercise;
+        if (!_ex) { _p.textContent = '-'; }
+        else if (_ex.id==='tongue-fb')  _p.textContent = 'ph:'+tongueFBPhase+' pk:'+tongueFBPeak.toFixed(3);
+        else if (_ex.id==='tongue-lr')  _p.textContent = 'ph:'+tongueLRPhase;
+        else if (_ex.id==='lip')        _p.textContent = 'ph:'+lipPhase;
+        else if (_ex.id==='pa-ta-ka')   _p.textContent = 'win:'+(Date.now()<patakaBeatWindowEnd?'Y':'N')+' spk:'+(patakaMouthWasOpen?'Y':'N')+' vol:'+micVolume.toFixed(3);
+      }
+    }
 
     prevFrame.set(curr);
   } catch(e) {
