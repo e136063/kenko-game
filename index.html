@@ -416,7 +416,10 @@
       <span class="hud-value" id="hud-score">0</span>
     </div>
     <button id="btn-pause">⏸</button>
-
+  </div>
+  <div id="debug-panel" style="position:absolute;top:56px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;font-size:11px;padding:5px 12px;border-radius:8px;text-align:center;pointer-events:none;font-family:monospace;z-index:99;min-width:230px;display:none;">
+    diff:<span id="dbg-diff">0</span> bot:<span id="dbg-bot">0</span> asym:<span id="dbg-asym">0</span> mic:<span id="dbg-mic">0</span><br>
+    phase:<span id="dbg-phase">-</span>
   </div>
 
   <!-- Title Screen -->
@@ -1382,6 +1385,7 @@ function startExercise(ex) {
   tongueLRLastDir = 0;
   tongueLRCooldown = 0;
   tongueFBPhase = 0; tongueFBPeak = 0;
+  tongueLRPhase = 0;
   lipPhase = 0;
   patakaMouthWasOpen = false;
   updateHUD();
@@ -1650,6 +1654,9 @@ let tongueLRCooldown = 0;
 let tongueFBPhase = 0;      // 0=idle, 1=extended
 let tongueFBPeak  = 0;
 
+// tongue-lr: same two-phase as tongue-fb (asymmetry unreliable on front cam)
+let tongueLRPhase = 0;
+
 // lip: two-phase (open → close)
 let lipPhase = 0;           // 0=idle, 1=opened
 
@@ -1739,6 +1746,23 @@ function captureMotionFrame() {
     motionDiffL   = smoothDiffL;
     motionDiffR   = smoothDiffR;
 
+    // Update debug panel
+    const _dp = document.getElementById('debug-panel');
+    if (_dp && _dp.style.display !== 'none') {
+      const _d = document.getElementById('dbg-diff');   if(_d) _d.textContent = motionDiff.toFixed(3);
+      const _b = document.getElementById('dbg-bot');    if(_b) _b.textContent = motionDiffBot.toFixed(3);
+      const _a = document.getElementById('dbg-asym');   if(_a) _a.textContent = (motionDiffR-motionDiffL).toFixed(3);
+      const _m = document.getElementById('dbg-mic');    if(_m) _m.textContent = micVolume.toFixed(3);
+      const _p = document.getElementById('dbg-phase');  if(_p) {
+        const _ex = state.exercise;
+        if (!_ex) { _p.textContent = '-'; }
+        else if (_ex.id==='tongue-fb') _p.textContent = 'ph:'+tongueFBPhase+' pk:'+tongueFBPeak.toFixed(3);
+        else if (_ex.id==='tongue-lr') _p.textContent = 'ph:'+tongueLRPhase;
+        else if (_ex.id==='lip') _p.textContent = 'ph:'+lipPhase;
+        else if (_ex.id==='pa-ta-ka') _p.textContent = 'spk:'+(patakaMouthWasOpen?'Y':'N')+' vol:'+micVolume.toFixed(3);
+      }
+    }
+
     prevFrame.set(curr);
   } catch(e) {
     // Never let motion detection crash the render loop
@@ -1777,24 +1801,19 @@ function checkMotion(ex) {
     }
 
     case 'tongue-lr': {
-      // Complete action = tongue goes clearly to one side THEN the other
-      if (now < tongueLRCooldown) return false;
-      const asym = motionDiffR - motionDiffL; // mirrored selfie
-      const goRight = asym >  0.025 && motionDiff > 0.022;
-      const goLeft  = asym < -0.025 && motionDiff > 0.022;
-
-      if (goRight && tongueLRLastDir !== 1) {
-        const wasMoving = tongueLRLastDir !== 0;
-        tongueLRLastDir = 1;
-        tongueLRCooldown = now + 500;
-        // Score only when direction changes (left→right or right→left = complete sweep)
-        return wasMoving;
+      // Same two-phase as tongue-fb: extend (motionDiff spike) → retract (drop to rest) = score
+      // Asymmetry detection is unreliable on front camera; overall diff works better
+      if (tongueLRPhase === 0) {
+        if (motionDiff > 0.055) {
+          tongueLRPhase = 1;
+        }
+        return false;
       }
-      if (goLeft && tongueLRLastDir !== -1) {
-        const wasMoving = tongueLRLastDir !== 0;
-        tongueLRLastDir = -1;
-        tongueLRCooldown = now + 500;
-        return wasMoving;
+      if (tongueLRPhase === 1) {
+        if (motionDiff < 0.015) {
+          tongueLRPhase = 0;
+          return true;
+        }
       }
       return false;
     }
