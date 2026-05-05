@@ -341,6 +341,38 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* ── Manual score button ── */
+  #btn-manual-score {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 16;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 1.35rem;
+    font-weight: 800;
+    font-family: var(--font-body);
+    border: none;
+    border-radius: 99px;
+    padding: 18px 0;
+    width: 72vw;
+    max-width: 300px;
+    white-space: nowrap;
+    box-shadow: 0 6px 24px rgba(255,107,53,0.45);
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+    letter-spacing: 0.04em;
+    transition: transform 0.1s, box-shadow 0.1s;
+    user-select: none;
+  }
+  #btn-manual-score:active {
+    transform: translateX(-50%) scale(0.94);
+    box-shadow: 0 2px 10px rgba(255,107,53,0.3);
+  }
+  #btn-manual-score.hidden { display: none; }
+
   /* ── Pause overlay ── */
   #screen-pause {
     background: rgba(0,0,0,0.55);
@@ -421,6 +453,8 @@
     phase:<span id="dbg-phase">-</span>
   </div>
   </div>
+  <!-- Manual score button — outside HUD so position:absolute works relative to viewport -->
+  <button id="btn-manual-score" class="hidden">做到了！➕</button>
 
   <!-- Title Screen -->
   <div class="screen" id="screen-title">
@@ -1409,6 +1443,9 @@ function startExercise(ex) {
 
   showScreen('game');
   const _dpShow = document.getElementById('debug-panel'); if(_dpShow) _dpShow.style.display='block';
+  // 顯示手動補分按鈕（pa-ta-ka 除外）
+  if (ex.id !== 'pa-ta-ka') btnManual.classList.remove('hidden');
+  else btnManual.classList.add('hidden');
   // Camera should already be active (started at title screen)
   // If not yet active, try again now
   if (!camActive && !camAsked) {
@@ -1439,6 +1476,7 @@ function startExercise(ex) {
 // ── End game ───────────────────────────────────────────────
 function endGame() {
   stopMic();
+  btnManual.classList.add('hidden'); // 結算時隱藏按鈕
   const _dpHide = document.getElementById('debug-panel'); if(_dpHide) _dpHide.style.display='none';
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
@@ -1523,12 +1561,15 @@ document.getElementById('btn-back-select').addEventListener('touchend', e => { e
 document.getElementById('btn-pause').addEventListener('click', () => {
   state.paused = true;
   canvas.style.pointerEvents = 'none';
+  btnManual.classList.add('hidden'); // 暫停時隱藏
   showScreen('pause');
 });
 
 document.getElementById('btn-resume').addEventListener('click', () => {
   state.paused = false;
   canvas.style.pointerEvents = 'auto';
+  // 繼續時恢復按鈕（pa-ta-ka 除外）
+  if (state.exercise && state.exercise.id !== 'pa-ta-ka') btnManual.classList.remove('hidden');
   showScreen('game');
   lastTimestamp = performance.now();
   requestAnimationFrame(gameRender);
@@ -1937,6 +1978,39 @@ function scoreMotionIfDetected() {
     }
   }
 }
+
+// ── Manual Score Button ────────────────────────────────────
+const btnManual = document.getElementById('btn-manual-score');
+
+function manualScore() {
+  if (!state.gameRunning || state.paused || showingCountdown) return;
+  const now = Date.now();
+  if (now < motionCooldown) return; // 共用 cooldown，防連點刷分
+  const ex = state.exercise;
+  if (!ex || ex.id === 'pa-ta-ka') return; // 發音練習不用按鈕
+
+  // 得分
+  state.score += 5;
+  state.hitBeats++;
+  hudScore.textContent = Math.floor(state.score);
+  motionCooldown = now + 900;
+
+  // popup + burst 效果
+  const np = getNotePosition(canvas.width, canvas.height);
+  hitPopups.push({ x: np.x, y: np.y - 30, text: '+5', color: ex.color, t: 0, maxT: 0.8 });
+  spawnBurst(np.x, np.y, ex.color, 8);
+  for (let i = 0; i < 6; i++) {
+    particles.push(new Particle(
+      np.x + (Math.random()-0.5)*40,
+      np.y + (Math.random()-0.5)*40,
+      ex.color
+    ));
+  }
+  updateHUD();
+}
+
+btnManual.addEventListener('click', manualScore);
+btnManual.addEventListener('touchend', e => { e.preventDefault(); manualScore(); });
 
 // ── Init ───────────────────────────────────────────────────
 showScreen('title');
