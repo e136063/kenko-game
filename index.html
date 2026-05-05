@@ -1781,7 +1781,7 @@ function checkMotion(ex) {
       // Complete action = tongue extends (motionDiff spike HIGH) then retracts (drops back LOW)
       // Phase 0 → 1: wait for big extension spike
       if (tongueFBPhase === 0) {
-        if (motionDiff > 0.055) {         // clear tongue extension
+        if (motionDiff > 0.013) {         // clear tongue extension
           tongueFBPhase = 1;
           tongueFBPeak  = motionDiff;
         }
@@ -1789,7 +1789,7 @@ function checkMotion(ex) {
       }
       // Phase 1 → score: motion drops back to near-still = tongue retracted
       if (tongueFBPhase === 1) {
-        if (motionDiff < 0.015) {         // back to rest
+        if (motionDiff < 0.009) {         // back to rest
           tongueFBPhase = 0;
           tongueFBPeak  = 0;
           return true;                    // ✓ complete cycle
@@ -1804,13 +1804,13 @@ function checkMotion(ex) {
       // Same two-phase as tongue-fb: extend (motionDiff spike) → retract (drop to rest) = score
       // Asymmetry detection is unreliable on front camera; overall diff works better
       if (tongueLRPhase === 0) {
-        if (motionDiff > 0.055) {
+        if (motionDiff > 0.013) {
           tongueLRPhase = 1;
         }
         return false;
       }
       if (tongueLRPhase === 1) {
-        if (motionDiff < 0.015) {
+        if (motionDiff < 0.009) {
           tongueLRPhase = 0;
           return true;
         }
@@ -1821,13 +1821,13 @@ function checkMotion(ex) {
     case 'lip': {
       // Complete action = mouth opens wide (bot spike) then closes back
       if (lipPhase === 0) {
-        if (motionDiffBot > 0.050) {      // clear lip pout or wide open
+        if (motionDiffBot > 0.013) {      // clear lip pout or wide open
           lipPhase = 1;
         }
         return false;
       }
       if (lipPhase === 1) {
-        if (motionDiffBot < 0.015) {      // back to rest = mouth closed
+        if (motionDiffBot < 0.009) {      // back to rest = mouth closed
           lipPhase = 0;
           return true;                    // ✓ complete open→close cycle
         }
@@ -1836,7 +1836,7 @@ function checkMotion(ex) {
     }
 
     default:
-      return motionDiff > 0.06;
+      return motionDiff > 0.013;
   }
 }
 
