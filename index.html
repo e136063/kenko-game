@@ -664,8 +664,15 @@ function buildExerciseList() {
         ${getStarsForExercise(ex.id)}
       </div>
     `;
-    card.addEventListener('click', () => startExercise(ex));
-    card.addEventListener('touchend', e => { e.preventDefault(); startExercise(ex); });
+    card.addEventListener('click', () => {
+      if (ex.id === 'pa-ta-ka' && !micActive) startMic(); // 提前請求麥克風
+      startExercise(ex);
+    });
+    card.addEventListener('touchend', e => {
+      e.preventDefault();
+      if (ex.id === 'pa-ta-ka' && !micActive) startMic(); // 提前請求麥克風
+      startExercise(ex);
+    });
     list.appendChild(card);
   });
 }
