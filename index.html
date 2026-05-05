@@ -1656,7 +1656,7 @@ let micStream = null;
 let micAnalyser = null;
 let micActive = false;
 let micVolume = 0;      // 0..1, updated in captureMotionFrame
-const MIC_THRESHOLD = 0.28;  // volume above this = "spoke" (clear vocalization only)
+const MIC_THRESHOLD = 0.20;  // volume above this = clear vocalization
 
 // Motion smoothing
 let smoothDiff = 0;
@@ -1723,7 +1723,7 @@ function captureMotionFrame() {
     const rawL   = sumL   / (cnt / 2);
     const rawR   = sumR   / (cnt / 2);
 
-    const A = 0.25;
+    const A = 0.35;
     smoothDiff    = smoothDiff    * (1-A) + raw    * A;
     smoothDiffBot = smoothDiffBot * (1-A) + rawBot * A;
     smoothDiffL   = smoothDiffL   * (1-A) + rawL   * A;
@@ -1752,7 +1752,7 @@ function checkMotion(ex) {
       // Complete action = tongue extends (motionDiff spike HIGH) then retracts (drops back LOW)
       // Phase 0 → 1: wait for big extension spike
       if (tongueFBPhase === 0) {
-        if (motionDiff > 0.13) {          // must be very clear tongue extension
+        if (motionDiff > 0.055) {         // clear tongue extension
           tongueFBPhase = 1;
           tongueFBPeak  = motionDiff;
         }
@@ -1760,7 +1760,7 @@ function checkMotion(ex) {
       }
       // Phase 1 → score: motion drops back to near-still = tongue retracted
       if (tongueFBPhase === 1) {
-        if (motionDiff < 0.020) {         // back to rest
+        if (motionDiff < 0.015) {         // back to rest
           tongueFBPhase = 0;
           tongueFBPeak  = 0;
           return true;                    // ✓ complete cycle
@@ -1775,8 +1775,8 @@ function checkMotion(ex) {
       // Complete action = tongue goes clearly to one side THEN the other
       if (now < tongueLRCooldown) return false;
       const asym = motionDiffR - motionDiffL; // mirrored selfie
-      const goRight = asym >  0.055 && motionDiff > 0.040;
-      const goLeft  = asym < -0.055 && motionDiff > 0.040;
+      const goRight = asym >  0.025 && motionDiff > 0.022;
+      const goLeft  = asym < -0.025 && motionDiff > 0.022;
 
       if (goRight && tongueLRLastDir !== 1) {
         const wasMoving = tongueLRLastDir !== 0;
@@ -1797,13 +1797,13 @@ function checkMotion(ex) {
     case 'lip': {
       // Complete action = mouth opens wide (bot spike) then closes back
       if (lipPhase === 0) {
-        if (motionDiffBot > 0.12) {       // must be clear lip pout or wide open
+        if (motionDiffBot > 0.050) {      // clear lip pout or wide open
           lipPhase = 1;
         }
         return false;
       }
       if (lipPhase === 1) {
-        if (motionDiffBot < 0.020) {      // back to rest = mouth closed
+        if (motionDiffBot < 0.015) {      // back to rest = mouth closed
           lipPhase = 0;
           return true;                    // ✓ complete open→close cycle
         }
