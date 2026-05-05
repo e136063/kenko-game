@@ -664,13 +664,13 @@ function buildExerciseList() {
         ${getStarsForExercise(ex.id)}
       </div>
     `;
-    card.addEventListener('click', () => {
-      if (ex.id === 'pa-ta-ka' && !micActive) startMic(); // 提前請求麥克風
+    card.addEventListener('click', async () => {
+      if (ex.id === 'pa-ta-ka' && !micActive) await startMic(); // 等麥克風授權完成再開始
       startExercise(ex);
     });
-    card.addEventListener('touchend', e => {
+    card.addEventListener('touchend', async e => {
       e.preventDefault();
-      if (ex.id === 'pa-ta-ka' && !micActive) startMic(); // 提前請求麥克風
+      if (ex.id === 'pa-ta-ka' && !micActive) await startMic(); // 等麥克風授權完成再開始
       startExercise(ex);
     });
     list.appendChild(card);
@@ -1431,8 +1431,7 @@ function startExercise(ex) {
   setTimeout(() => {
     motionTimer = setInterval(captureMotionFrame, 200); // 5fps — enough for detection, less jank
   }, 300);
-  // Start mic for pa-ta-ka
-  if (ex.id === 'pa-ta-ka' && !micActive) startMic();
+  // mic already started (or not needed) — handled at card tap time
   // schedulerTimer no longer needed — schedulerTick runs inside gameRender via rAF
   clearInterval(schedulerTimer); schedulerTimer = null;
 }
