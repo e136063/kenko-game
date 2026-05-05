@@ -1524,6 +1524,7 @@ document.getElementById('btn-start').addEventListener('touchend', e => { e.preve
 
 document.getElementById('btn-howto').addEventListener('click', () => {
   if (!camAsked) { camAsked = true; startCamera(); }
+  tutorialFrom = 'title';
   showScreen('tutorial');
 });
 
@@ -1547,13 +1548,14 @@ document.getElementById('btn-share').addEventListener('click', () => {
     });
   }
 });
-document.getElementById('btn-howto').addEventListener('touchend', e => { e.preventDefault(); showScreen('tutorial'); });
+document.getElementById('btn-howto').addEventListener('touchend', e => { e.preventDefault(); tutorialFrom = 'title'; showScreen('tutorial'); });
 
 document.getElementById('btn-tutorial-ok').addEventListener('click', () => {
+  if (tutorialFrom === 'title') { tutorialFrom = null; showScreen('title'); return; }
   buildExerciseList();
   showScreen('select');
 });
-document.getElementById('btn-tutorial-ok').addEventListener('touchend', e => { e.preventDefault(); buildExerciseList(); showScreen('select'); });
+document.getElementById('btn-tutorial-ok').addEventListener('touchend', e => { e.preventDefault(); if (tutorialFrom === 'title') { tutorialFrom = null; showScreen('title'); return; } buildExerciseList(); showScreen('select'); });
 
 document.getElementById('btn-back-select').addEventListener('click', () => showScreen('title'));
 document.getElementById('btn-back-select').addEventListener('touchend', e => { e.preventDefault(); showScreen('title'); });
@@ -1716,6 +1718,7 @@ let tongueLRLastDir = 0;    // -1=left, 1=right
 let tongueLRCooldown = 0;
 
 // tongue-fb: two-phase (extend → retract)
+let tutorialFrom = null; // 記錄從哪裡打開 tutorial
 let tongueFBPhase = 0;      // 0=idle, 1=extended
 let tongueFBPeak  = 0;
 
