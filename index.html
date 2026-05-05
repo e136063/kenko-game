@@ -1387,6 +1387,9 @@ function startExercise(ex) {
   updateHUD();
 
   showScreen('game');
+  // Show debug panel during exercise
+  const dp = document.getElementById('debug-panel');
+  if (dp) dp.style.display = 'block';
 
   // Camera should already be active (started at title screen)
   // If not yet active, try again now
@@ -1417,6 +1420,8 @@ function startExercise(ex) {
 // ── End game ───────────────────────────────────────────────
 function endGame() {
   stopMic();
+  const dp = document.getElementById('debug-panel');
+  if (dp) dp.style.display = 'none';
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
