@@ -1138,11 +1138,12 @@ function gameRender(ts) {
 
   // Instruction prompt (only when no camera — camera mode shows bubble instead)
   if (!camActive) {
+    const npInst = getNotePosition(W, H);
     ctx.save();
     ctx.textAlign = 'center';
     ctx.font = `500 ${Math.min(W * 0.045, 18)}px 'Noto Sans TC', sans-serif`;
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillText(ex.instruction, W / 2, H * 0.68);
+    ctx.fillText(ex.instruction, W / 2, npInst.y + 54);
     ctx.restore();
   }
 
