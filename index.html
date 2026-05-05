@@ -1392,8 +1392,8 @@ function startExercise(ex) {
   tongueLRLastDir = 0;
   tongueLRCooldown = 0;
   tongueFBPhase = 0; tongueFBPeak = 0;
-  tongueLRPhase = 0;
-  lipPhase = 0;
+  tongueLRPhase = 0; tongueLRPeak = 0;
+  lipPhase = 0; lipPeak = 0;
   patakaMouthWasOpen = false;
   patakaBeatWindowEnd = 0;
   patakaBeatScored = false;
@@ -1663,9 +1663,11 @@ let tongueFBPeak  = 0;
 
 // tongue-lr: same two-phase as tongue-fb (asymmetry unreliable on front cam)
 let tongueLRPhase = 0;
+let tongueLRPeak  = 0;
 
 // lip: two-phase (open → close)
 let lipPhase = 0;           // 0=idle, 1=opened
+let lipPeak  = 0;           // peak bot value in phase 1
 
 // pa-ta-ka: open/close cycle
 let patakaMouthWasOpen = false;
@@ -1765,8 +1767,8 @@ function captureMotionFrame() {
         const _ex = state.exercise;
         if (!_ex) { _p.textContent = '-'; }
         else if (_ex.id==='tongue-fb')  _p.textContent = 'ph:'+tongueFBPhase+' pk:'+tongueFBPeak.toFixed(3);
-        else if (_ex.id==='tongue-lr')  _p.textContent = 'ph:'+tongueLRPhase;
-        else if (_ex.id==='lip')        _p.textContent = 'ph:'+lipPhase;
+        else if (_ex.id==='tongue-lr')  _p.textContent = 'ph:'+tongueLRPhase+' pk:'+tongueLRPeak.toFixed(3);
+        else if (_ex.id==='lip')        _p.textContent = 'ph:'+lipPhase+' pk:'+lipPeak.toFixed(3);
         else if (_ex.id==='pa-ta-ka')   _p.textContent = 'win:'+(Date.now()<patakaBeatWindowEnd?'Y':'N')+' spk:'+(patakaMouthWasOpen?'Y':'N')+' vol:'+micVolume.toFixed(3);
       }
     }
@@ -1797,13 +1799,13 @@ function checkMotion(ex) {
       }
       // Phase 1 → score: motion drops back to near-still = tongue retracted
       if (tongueFBPhase === 1) {
+        if (motionDiff > tongueFBPeak) tongueFBPeak = motionDiff;
         if (motionDiff < 0.016) {         // back to rest
+          const scored = tongueFBPeak >= 0.025; // must have had a real peak
           tongueFBPhase = 0;
           tongueFBPeak  = 0;
-          return true;                    // ✓ complete cycle
+          return scored;
         }
-        // update peak but stay in phase 1
-        if (motionDiff > tongueFBPeak) tongueFBPeak = motionDiff;
       }
       return false;
     }
@@ -1814,13 +1816,17 @@ function checkMotion(ex) {
       if (tongueLRPhase === 0) {
         if (motionDiff > 0.020) {
           tongueLRPhase = 1;
+          tongueLRPeak  = motionDiff;
         }
         return false;
       }
       if (tongueLRPhase === 1) {
+        if (motionDiff > tongueLRPeak) tongueLRPeak = motionDiff;
         if (motionDiff < 0.016) {
+          const scored = tongueLRPeak >= 0.025;
           tongueLRPhase = 0;
-          return true;
+          tongueLRPeak  = 0;
+          return scored;
         }
       }
       return false;
@@ -1828,16 +1834,21 @@ function checkMotion(ex) {
 
     case 'lip': {
       // Complete action = mouth opens wide (bot spike) then closes back
+      // Require peak >= 0.030 to reject ambient noise
       if (lipPhase === 0) {
-        if (motionDiffBot > 0.025) {      // clear lip pout or wide open
+        if (motionDiffBot > 0.025) {
           lipPhase = 1;
+          lipPeak  = motionDiffBot;
         }
         return false;
       }
       if (lipPhase === 1) {
-        if (motionDiffBot < 0.013) {      // back to rest = mouth closed
+        if (motionDiffBot > lipPeak) lipPeak = motionDiffBot;
+        if (motionDiffBot < 0.013) {
+          const scored = lipPeak >= 0.030;  // must have had a real peak
           lipPhase = 0;
-          return true;                    // ✓ complete open→close cycle
+          lipPeak  = 0;
+          return scored;
         }
       }
       return false;
