@@ -1499,11 +1499,13 @@ document.getElementById('btn-back-select').addEventListener('touchend', e => { e
 
 document.getElementById('btn-pause').addEventListener('click', () => {
   state.paused = true;
+  canvas.style.pointerEvents = 'none';
   showScreen('pause');
 });
 
 document.getElementById('btn-resume').addEventListener('click', () => {
   state.paused = false;
+  canvas.style.pointerEvents = 'auto';
   showScreen('game');
   lastTimestamp = performance.now();
   requestAnimationFrame(gameRender);
