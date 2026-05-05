@@ -1569,10 +1569,9 @@ const camVideo = document.getElementById('cam-video');
 
 async function startCamera() {
   try {
-    // Request video + audio together on iOS to avoid stream conflict
     camStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: true
+      audio: false
     });
     camVideo.setAttribute('playsinline', '');
     camVideo.setAttribute('webkit-playsinline', '');
@@ -1586,18 +1585,6 @@ async function startCamera() {
     });
     await camVideo.play().catch(() => {});
     camActive = true;
-
-    // Pre-build mic analyser from the audio track in the same stream
-    const audioTracks = camStream.getAudioTracks();
-    if (audioTracks.length > 0) {
-      const micCtx = new (window.AudioContext || window.webkitAudioContext)();
-      audioCtx = micCtx;
-      const source = micCtx.createMediaStreamSource(camStream);
-      micAnalyser = micCtx.createAnalyser();
-      micAnalyser.fftSize = 256;
-      source.connect(micAnalyser);
-      micStream = camStream; // share stream reference
-    }
   } catch (err) {
     console.warn('Camera unavailable:', err);
     camActive = false;
@@ -1605,18 +1592,12 @@ async function startCamera() {
 }
 
 async function startMic() {
-  // Mic is already set up in startCamera() via shared stream
-  // Just activate it
-  if (micAnalyser) {
-    micActive = true;
-    return;
-  }
-  // Fallback: request audio separately (non-iOS)
+  if (micActive) return;  // already running
   try {
-    const fallbackStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    micStream = fallbackStream;
-    const micCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (!audioCtx) audioCtx = micCtx;
+    // Request audio-only — does NOT conflict with existing video stream on iOS
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const micCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx = micCtx;
     const source = micCtx.createMediaStreamSource(micStream);
     micAnalyser = micCtx.createAnalyser();
     micAnalyser.fftSize = 256;
@@ -1629,19 +1610,21 @@ async function startMic() {
 }
 
 function stopMic() {
-  // Don't stop tracks — they are shared with camStream
-  // Just deactivate the analyser
+  if (micStream) {
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+  }
+  if (audioCtx) {
+    audioCtx.close().catch(() => {});
+    audioCtx = null;
+  }
   micAnalyser = null;
   micActive = false;
   micVolume = 0;
-  // Note: micStream is same reference as camStream, don't stop it here
 }
 
 function stopCamera() {
   if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
-  micStream = null; // shared reference — clear together
-  micAnalyser = null;
-  micActive = false;
   camVideo.srcObject = null;
   camActive = false;
 }
