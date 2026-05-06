@@ -341,6 +341,33 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+
+  /* ── Calibration overlay ── */
+  #calibration-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.55);
+    pointer-events: none;
+  }
+  #calibration-overlay.hidden { display: none; }
+  #calibration-box {
+    background: rgba(255,255,255,0.95);
+    border-radius: 20px;
+    padding: 28px 36px;
+    text-align: center;
+    max-width: 300px;
+  }
+  #calibration-box .cal-icon { font-size: 2.4rem; margin-bottom: 8px; }
+  #calibration-box .cal-title { font-size: 1.15rem; font-weight: 700; color: #333; margin-bottom: 6px; }
+  #calibration-box .cal-sub { font-size: 0.9rem; color: #777; margin-bottom: 14px; }
+  #calibration-bar-wrap { width: 220px; height: 8px; background: #eee; border-radius: 99px; overflow: hidden; }
+  #calibration-bar { height: 100%; width: 0%; background: var(--color-primary); border-radius: 99px; transition: width 0.18s linear; }
+
   /* ── Pause overlay ── */
   #screen-pause {
     background: rgba(0,0,0,0.55);
@@ -420,6 +447,16 @@
     diff:<span id="dbg-diff">0</span> bot:<span id="dbg-bot">0</span> mic:<span id="dbg-mic">0</span><br>
     phase:<span id="dbg-phase">-</span>
   </div>
+  </div>
+
+  <!-- Calibration overlay -->
+  <div id="calibration-overlay" class="hidden">
+    <div id="calibration-box">
+      <div class="cal-icon">🎯</div>
+      <div class="cal-title">環境校準中</div>
+      <div class="cal-sub">請保持靜止，不要說話</div>
+      <div id="calibration-bar-wrap"><div id="calibration-bar"></div></div>
+    </div>
   </div>
 
   <!-- Title Screen -->
@@ -1416,30 +1453,33 @@ function startExercise(ex) {
     startCamera();
   }
 
-  // Countdown is handled inside gameRender using timestamps — no setTimeout/setInterval needed
-  showingCountdown = true;
-  countdownVal = 3;
-  state.gameRunning = true;
-  lastTimestamp = performance.now();
-  // gameStartTime = when countdown ends (3 seconds from now)
-  gameStartTime = Date.now() + 3000;
-  nextBeatTime = gameStartTime + 200;
-  requestAnimationFrame(gameRender);
-
-  // motionTimer for pixel-diff — delay 300ms to let game render settle first
+  // Start motion timer early so calibration can collect samples
   clearInterval(motionTimer);
-  setTimeout(() => {
-    motionTimer = setInterval(captureMotionFrame, 200); // 5fps — enough for detection, less jank
-  }, 300);
-  // mic already started (or not needed) — handled at card tap time
-  // schedulerTimer no longer needed — schedulerTick runs inside gameRender via rAF
-  clearInterval(schedulerTimer); schedulerTimer = null;
+  setTimeout(() => { motionTimer = setInterval(captureMotionFrame, 200); }, 300);
+
+  // Calibrate noise floor, then start countdown
+  startCalibration(() => {
+    tongueFBPhase = 0; tongueFBPeak = 0;
+    tongueLRPhase = 0; tongueLRPeak = 0;
+    lipPhase = 0; lipPeak = 0;
+    motionCooldown = 0;
+
+    showingCountdown = true;
+    countdownVal = 3;
+    state.gameRunning = true;
+    lastTimestamp = performance.now();
+    gameStartTime = Date.now() + 3000;
+    nextBeatTime = gameStartTime + 200;
+    requestAnimationFrame(gameRender);
+    clearInterval(schedulerTimer); schedulerTimer = null;
+  });
 }
 
 // ── End game ───────────────────────────────────────────────
 function endGame() {
   stopMic();
   const _dpHide = document.getElementById('debug-panel'); if(_dpHide) _dpHide.style.display='none';
+  const _calHide = document.getElementById('calibration-overlay'); if(_calHide) _calHide.classList.add('hidden');
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
@@ -1811,7 +1851,7 @@ function checkMotion(ex) {
       // Complete action = tongue extends (motionDiff spike HIGH) then retracts (drops back LOW)
       // Phase 0 → 1: wait for big extension spike
       if (tongueFBPhase === 0) {
-        if (motionDiff > 0.020) {         // clear tongue extension
+        if (motionDiff > CAL_EXTEND) {    // clear tongue extension
           tongueFBPhase = 1;
           tongueFBPeak  = motionDiff;
         }
@@ -1820,8 +1860,8 @@ function checkMotion(ex) {
       // Phase 1 → score: motion drops back to near-still = tongue retracted
       if (tongueFBPhase === 1) {
         if (motionDiff > tongueFBPeak) tongueFBPeak = motionDiff;
-        if (motionDiff < 0.030) {         // back to rest
-          const scored = tongueFBPeak >= 0.025; // must have had a real peak
+        if (motionDiff < CAL_REST) {       // back to rest
+          const scored = tongueFBPeak >= CAL_PEAK; // must have had a real peak
           tongueFBPhase = 0;
           tongueFBPeak  = 0;
           return scored;
@@ -1834,7 +1874,7 @@ function checkMotion(ex) {
       // Same two-phase as tongue-fb: extend (motionDiff spike) → retract (drop to rest) = score
       // Asymmetry detection is unreliable on front camera; overall diff works better
       if (tongueLRPhase === 0) {
-        if (motionDiff > 0.020) {
+        if (motionDiff > CAL_EXTEND) {
           tongueLRPhase = 1;
           tongueLRPeak  = motionDiff;
         }
@@ -1842,8 +1882,8 @@ function checkMotion(ex) {
       }
       if (tongueLRPhase === 1) {
         if (motionDiff > tongueLRPeak) tongueLRPeak = motionDiff;
-        if (motionDiff < 0.030) {
-          const scored = tongueLRPeak >= 0.025;
+        if (motionDiff < CAL_REST) {
+          const scored = tongueLRPeak >= CAL_PEAK;
           tongueLRPhase = 0;
           tongueLRPeak  = 0;
           return scored;
@@ -1856,7 +1896,7 @@ function checkMotion(ex) {
       // Complete action = mouth opens wide (bot spike) then closes back
       // Require peak >= 0.030 to reject ambient noise
       if (lipPhase === 0) {
-        if (motionDiffBot > 0.025) {
+        if (motionDiffBot > CAL_BOT_EXTEND) {
           lipPhase = 1;
           lipPeak  = motionDiffBot;
         }
@@ -1864,8 +1904,8 @@ function checkMotion(ex) {
       }
       if (lipPhase === 1) {
         if (motionDiffBot > lipPeak) lipPeak = motionDiffBot;
-        if (motionDiffBot < 0.013) {
-          const scored = lipPeak >= 0.030;  // must have had a real peak
+        if (motionDiffBot < CAL_BOT_REST) {
+          const scored = lipPeak >= CAL_BOT_PEAK; // must have had a real peak
           lipPhase = 0;
           lipPeak  = 0;
           return scored;
@@ -1939,6 +1979,61 @@ function scoreMotionIfDetected() {
       ));
     }
   }
+}
+
+// ── Calibration ────────────────────────────────────────────
+let calNoiseFloor = 0;
+let calBotFloor = 0;
+let CAL_EXTEND     = 0.020;
+let CAL_REST       = 0.030;
+let CAL_PEAK       = 0.025;
+let CAL_BOT_EXTEND = 0.025;
+let CAL_BOT_REST   = 0.013;
+let CAL_BOT_PEAK   = 0.030;
+
+const CAL_FRAMES = 15;
+
+function startCalibration(onDone) {
+  let calSamples = [];
+  let calBotSamples = [];
+  prevFrame = null;
+  smoothDiff = 0; smoothDiffBot = 0;
+
+  const overlay = document.getElementById('calibration-overlay');
+  const bar = document.getElementById('calibration-bar');
+  overlay.classList.remove('hidden');
+  bar.style.width = '0%';
+
+  let calTimer = setInterval(() => {
+    if (camActive && (motionDiff > 0 || calSamples.length > 0)) {
+      calSamples.push(motionDiff);
+      calBotSamples.push(motionDiffBot);
+    } else {
+      calSamples.push(0.010);
+      calBotSamples.push(0.010);
+    }
+    bar.style.width = Math.min(100, Math.round(calSamples.length / CAL_FRAMES * 100)) + '%';
+
+    if (calSamples.length >= CAL_FRAMES) {
+      clearInterval(calTimer);
+
+      const sortedDiff = [...calSamples].sort((a,b) => a-b);
+      const sortedBot  = [...calBotSamples].sort((a,b) => a-b);
+      const p90idx = Math.floor(sortedDiff.length * 0.9);
+      calNoiseFloor = Math.max(sortedDiff[p90idx], 0.008);
+      calBotFloor   = Math.max(sortedBot[p90idx],  0.008);
+
+      CAL_EXTEND     = Math.max(calNoiseFloor * 2.5, 0.018);
+      CAL_REST       = Math.max(calNoiseFloor * 2.0, 0.015);
+      CAL_PEAK       = Math.max(calNoiseFloor * 3.5, 0.022);
+      CAL_BOT_EXTEND = Math.max(calBotFloor   * 2.5, 0.020);
+      CAL_BOT_REST   = Math.max(calBotFloor   * 1.8, 0.012);
+      CAL_BOT_PEAK   = Math.max(calBotFloor   * 3.5, 0.025);
+
+      overlay.classList.add('hidden');
+      onDone();
+    }
+  }, 200);
 }
 
 // ── Init ───────────────────────────────────────────────────
