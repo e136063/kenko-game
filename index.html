@@ -1820,7 +1820,7 @@ function checkMotion(ex) {
       // Phase 1 → score: motion drops back to near-still = tongue retracted
       if (tongueFBPhase === 1) {
         if (motionDiff > tongueFBPeak) tongueFBPeak = motionDiff;
-        if (motionDiff < 0.016) {         // back to rest
+        if (motionDiff < 0.030) {         // back to rest
           const scored = tongueFBPeak >= 0.025; // must have had a real peak
           tongueFBPhase = 0;
           tongueFBPeak  = 0;
@@ -1842,7 +1842,7 @@ function checkMotion(ex) {
       }
       if (tongueLRPhase === 1) {
         if (motionDiff > tongueLRPeak) tongueLRPeak = motionDiff;
-        if (motionDiff < 0.016) {
+        if (motionDiff < 0.030) {
           const scored = tongueLRPeak >= 0.025;
           tongueLRPhase = 0;
           tongueLRPeak  = 0;
