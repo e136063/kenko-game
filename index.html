@@ -229,7 +229,7 @@
   /* ── Result Screen ── */
   #screen-result {
     background: linear-gradient(160deg, #E8F8F7 0%, #D5F5F2 100%);
-    z-index: 10;
+    z-index: 15;
     text-align: center;
   }
   .result-title {
@@ -1590,8 +1590,17 @@ document.getElementById('btn-quit').addEventListener('click', () => {
 document.getElementById('btn-replay').addEventListener('click', () => {
   startExercise(state.exercise);
 });
+document.getElementById('btn-replay').addEventListener('touchend', e => {
+  e.preventDefault();
+  startExercise(state.exercise);
+});
 
 document.getElementById('btn-back-result').addEventListener('click', () => {
+  buildExerciseList();
+  showScreen('select');
+});
+document.getElementById('btn-back-result').addEventListener('touchend', e => {
+  e.preventDefault();
   buildExerciseList();
   showScreen('select');
 });
