@@ -443,10 +443,12 @@
       <span class="hud-value" id="hud-score">0</span>
     </div>
     <button id="btn-pause">⏸</button>
-  <div id="debug-panel" style="position:absolute;top:56px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;font-size:11px;padding:5px 12px;border-radius:8px;text-align:center;pointer-events:none;font-family:monospace;z-index:999;min-width:230px;display:none;">
-    diff:<span id="dbg-diff">0</span> bot:<span id="dbg-bot">0</span> mic:<span id="dbg-mic">0</span><br>
-    phase:<span id="dbg-phase">-</span>
   </div>
+  <!-- Debug panel: outside #hud to avoid flex/overflow clipping -->
+  <div id="debug-panel" style="position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.80);color:#0f0;font-size:11px;padding:6px 14px;border-radius:8px;text-align:center;pointer-events:none;font-family:monospace;z-index:9999;min-width:240px;display:none;white-space:nowrap;">
+    <span id="dbg-diff">mth:0 all:0</span><br>
+    <span id="dbg-phase">-</span><br>
+    mic:<span id="dbg-mic">0</span> bot:<span id="dbg-bot">0</span>
   </div>
 
   <!-- Calibration overlay -->
@@ -1436,9 +1438,9 @@ function startExercise(ex) {
   motionDiff = 0; motionDiffBot = 0; motionDiffL = 0; motionDiffR = 0;
   tongueLRLastDir = 0;
   tongueLRCooldown = 0;
-  tongueFBPhase = 0; tongueFBPeak = 0;
-  tongueLRPhase = 0; tongueLRPeak = 0;
-  lipPhase = 0; lipPeak = 0;
+  tongueFBPhase = 0; tongueFBPeak = 0; tongueFBPhaseStart = 0;
+  tongueLRPhase = 0; tongueLRPeak = 0; tongueLRPhaseStart = 0;
+  lipPhase = 0; lipPeak = 0; lipPhaseStart = 0;
   patakaMouthWasOpen = false;
   patakaBeatWindowEnd = 0;
   patakaBeatScored = false;
@@ -1459,9 +1461,9 @@ function startExercise(ex) {
 
   // Calibrate noise floor, then start countdown
   startCalibration(() => {
-    tongueFBPhase = 0; tongueFBPeak = 0;
-    tongueLRPhase = 0; tongueLRPeak = 0;
-    lipPhase = 0; lipPeak = 0;
+    tongueFBPhase = 0; tongueFBPeak = 0; tongueFBPhaseStart = 0;
+    tongueLRPhase = 0; tongueLRPeak = 0; tongueLRPhaseStart = 0;
+    lipPhase = 0; lipPeak = 0; lipPhaseStart = 0;
     motionCooldown = 0;
 
     showingCountdown = true;
@@ -1704,8 +1706,8 @@ let motionCooldown = 0;       // timestamp
 let faceFrameCount = 0;
 
 // Offscreen canvas for pixel sampling
-const SAMPLE_W = 60;  // small for speed
-const SAMPLE_H = 45;
+const SAMPLE_W = 80;  // larger for better ROI resolution
+const SAMPLE_H = 60;
 let motionCanvas = null;
 let motionCtx = null;
 let prevFrame = null;  // Uint8ClampedArray of previous frame
@@ -1730,14 +1732,19 @@ let tongueLRCooldown = 0;
 let tutorialFrom = null; // 記錄從哪裡打開 tutorial
 let tongueFBPhase = 0;      // 0=idle, 1=extended
 let tongueFBPeak  = 0;
+let tongueFBPhaseStart = 0; // timestamp when phase 0→1 triggered
 
 // tongue-lr: same two-phase as tongue-fb (asymmetry unreliable on front cam)
 let tongueLRPhase = 0;
 let tongueLRPeak  = 0;
+let tongueLRPhaseStart = 0;
 
 // lip: two-phase (open → close)
 let lipPhase = 0;           // 0=idle, 1=opened
 let lipPeak  = 0;           // peak bot value in phase 1
+let lipPhaseStart = 0;
+
+const PHASE_MIN_MS = 120; // must hold phase 1 for at least 120ms to be a real action
 
 // pa-ta-ka: open/close cycle
 let patakaMouthWasOpen = false;
@@ -1850,9 +1857,9 @@ function captureMotionFrame() {
       const _p = document.getElementById('dbg-phase'); if(_p) {
         const _ex = state.exercise;
         if (!_ex) { _p.textContent = '-'; }
-        else if (_ex.id==='tongue-fb')  _p.textContent = 'ph:'+tongueFBPhase+' pk:'+tongueFBPeak.toFixed(3)+' ext:'+CAL_EXTEND.toFixed(3)+' rst:'+CAL_REST.toFixed(3);
-        else if (_ex.id==='tongue-lr')  _p.textContent = 'ph:'+tongueLRPhase+' pk:'+tongueLRPeak.toFixed(3)+' ext:'+CAL_EXTEND.toFixed(3);
-        else if (_ex.id==='lip')        _p.textContent = 'ph:'+lipPhase+' pk:'+lipPeak.toFixed(3)+' ext:'+CAL_EXTEND.toFixed(3);
+        else if (_ex.id==='tongue-fb')  _p.textContent = 'ph:'+tongueFBPhase+(tongueFBPhase===1?' hold:'+(Date.now()-tongueFBPhaseStart)+'ms':'')+' pk:'+tongueFBPeak.toFixed(3)+'\next:'+CAL_EXTEND.toFixed(3)+' rst:'+CAL_REST.toFixed(3)+' pk≥:'+CAL_PEAK.toFixed(3);
+        else if (_ex.id==='tongue-lr')  _p.textContent = 'ph:'+tongueLRPhase+(tongueLRPhase===1?' hold:'+(Date.now()-tongueLRPhaseStart)+'ms':'')+' pk:'+tongueLRPeak.toFixed(3)+'\next:'+CAL_EXTEND.toFixed(3)+' rst:'+CAL_REST.toFixed(3)+' pk≥:'+CAL_PEAK.toFixed(3);
+        else if (_ex.id==='lip')        _p.textContent = 'ph:'+lipPhase+(lipPhase===1?' hold:'+(Date.now()-lipPhaseStart)+'ms':'')+' pk:'+lipPeak.toFixed(3)+'\next:'+CAL_EXTEND.toFixed(3)+' rst:'+CAL_REST.toFixed(3)+' pk≥:'+CAL_PEAK.toFixed(3);
         else if (_ex.id==='pa-ta-ka')   _p.textContent = 'win:'+(Date.now()<patakaBeatWindowEnd?'Y':'N')+' spk:'+(patakaMouthWasOpen?'Y':'N')+' vol:'+micVolume.toFixed(3);
       }
     }
@@ -1872,64 +1879,73 @@ function checkMotion(ex) {
   switch (ex.id) {
 
     case 'tongue-fb': {
-      // Complete action = tongue extends (motionDiffMouth spike HIGH) then retracts (drops back LOW)
-      // Uses mouth ROI diff for precision — ignores background noise
       if (tongueFBPhase === 0) {
         if (motionDiffMouth > CAL_EXTEND) {
           tongueFBPhase = 1;
           tongueFBPeak  = motionDiffMouth;
+          tongueFBPhaseStart = now;
         }
         return false;
       }
       if (tongueFBPhase === 1) {
         if (motionDiffMouth > tongueFBPeak) tongueFBPeak = motionDiffMouth;
-        if (motionDiffMouth < CAL_REST) {
+        const heldLongEnough = (now - tongueFBPhaseStart) >= PHASE_MIN_MS;
+        if (motionDiffMouth < CAL_REST && heldLongEnough) {
           const scored = tongueFBPeak >= CAL_PEAK;
-          tongueFBPhase = 0;
-          tongueFBPeak  = 0;
+          tongueFBPhase = 0; tongueFBPeak = 0; tongueFBPhaseStart = 0;
           return scored;
+        }
+        // If diff drops back immediately (< PHASE_MIN_MS) — false trigger, reset silently
+        if (motionDiffMouth < CAL_REST && !heldLongEnough) {
+          tongueFBPhase = 0; tongueFBPeak = 0; tongueFBPhaseStart = 0;
         }
       }
       return false;
     }
 
     case 'tongue-lr': {
-      // Same two-phase as tongue-fb — mouth ROI diff
       if (tongueLRPhase === 0) {
         if (motionDiffMouth > CAL_EXTEND) {
           tongueLRPhase = 1;
           tongueLRPeak  = motionDiffMouth;
+          tongueLRPhaseStart = now;
         }
         return false;
       }
       if (tongueLRPhase === 1) {
         if (motionDiffMouth > tongueLRPeak) tongueLRPeak = motionDiffMouth;
-        if (motionDiffMouth < CAL_REST) {
+        const heldLongEnough = (now - tongueLRPhaseStart) >= PHASE_MIN_MS;
+        if (motionDiffMouth < CAL_REST && heldLongEnough) {
           const scored = tongueLRPeak >= CAL_PEAK;
-          tongueLRPhase = 0;
-          tongueLRPeak  = 0;
+          tongueLRPhase = 0; tongueLRPeak = 0; tongueLRPhaseStart = 0;
           return scored;
+        }
+        if (motionDiffMouth < CAL_REST && !heldLongEnough) {
+          tongueLRPhase = 0; tongueLRPeak = 0; tongueLRPhaseStart = 0;
         }
       }
       return false;
     }
 
     case 'lip': {
-      // Complete action = mouth opens wide (motionDiffMouth spike) then closes back
       if (lipPhase === 0) {
         if (motionDiffMouth > CAL_EXTEND) {
           lipPhase = 1;
           lipPeak  = motionDiffMouth;
+          lipPhaseStart = now;
         }
         return false;
       }
       if (lipPhase === 1) {
         if (motionDiffMouth > lipPeak) lipPeak = motionDiffMouth;
-        if (motionDiffMouth < CAL_REST) {
+        const heldLongEnough = (now - lipPhaseStart) >= PHASE_MIN_MS;
+        if (motionDiffMouth < CAL_REST && heldLongEnough) {
           const scored = lipPeak >= CAL_PEAK;
-          lipPhase = 0;
-          lipPeak  = 0;
+          lipPhase = 0; lipPeak = 0; lipPhaseStart = 0;
           return scored;
+        }
+        if (motionDiffMouth < CAL_REST && !heldLongEnough) {
+          lipPhase = 0; lipPeak = 0; lipPhaseStart = 0;
         }
       }
       return false;
@@ -2041,12 +2057,12 @@ function startCalibration(onDone) {
       calNoiseFloor = Math.max(sorted[p90idx], 0.006);
 
       // All exercises now use mouth ROI thresholds
-      // extend = noise × 1.8, min 0.012, max 0.030
-      CAL_EXTEND     = Math.min(Math.max(calNoiseFloor * 1.8, 0.012), 0.030);
-      // rest   = noise × 1.3, min 0.009, max 0.022
-      CAL_REST       = Math.min(Math.max(calNoiseFloor * 1.3, 0.009), 0.022);
-      // peak   = noise × 3.0, min 0.018, max 0.045
-      CAL_PEAK       = Math.min(Math.max(calNoiseFloor * 3.0, 0.018), 0.045);
+      // extend = noise × 1.5, min 0.010, max 0.022  (more sensitive entry)
+      CAL_EXTEND     = Math.min(Math.max(calNoiseFloor * 1.5, 0.010), 0.022);
+      // rest   = noise × 1.2, min 0.008, max 0.018  (return to near-still)
+      CAL_REST       = Math.min(Math.max(calNoiseFloor * 1.2, 0.008), 0.018);
+      // peak   = noise × 2.5, min 0.016, max 0.040  (must have had real motion)
+      CAL_PEAK       = Math.min(Math.max(calNoiseFloor * 2.5, 0.016), 0.040);
       // Bot thresholds kept for compatibility but not used in FSM
       CAL_BOT_EXTEND = CAL_EXTEND;
       CAL_BOT_REST   = CAL_REST;
