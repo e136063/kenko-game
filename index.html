@@ -615,7 +615,7 @@ const EXERCISES = [
     icon: '🗣️',
     color: '#F7B731',
     bg: '#FFFBE8',
-    bpm: 84,
+    bpm: 48,
     totalBeats: 90,
     instruction: '清楚說出 啪、他、卡',
     phases: ['啪', '他', '卡'],
@@ -1087,7 +1087,7 @@ function gameRender(ts) {
       playBeat();
       state.totalBeats++;
       // PA·TA·KA: open a scoring window for each individual syllable beat
-      // bpm=84 → ~714ms per beat; window=550ms gives clear separation
+      // bpm=48 → ~1250ms per beat (PA+TA+KA each); window=550ms gives clear separation
       if (state.exercise && state.exercise.id === 'pa-ta-ka') {
         patakaBeatWindowEnd = Date.now() + 550;
         patakaBeatScored = false;
