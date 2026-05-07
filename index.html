@@ -1056,9 +1056,32 @@ function getNotePosition(W, H) {
 
 // ── Game rendering ─────────────────────────────────────────
 let lastTimestamp = 0;
+let lastRenderWallTime = 0; // wall-clock time of last gameRender call
+let rafWatchdog = null;
+
+function startRafWatchdog() {
+  clearInterval(rafWatchdog);
+  rafWatchdog = setInterval(() => {
+    if (!state.gameRunning || state.paused) return;
+    const gap = Date.now() - lastRenderWallTime;
+    if (gap > 2000) {
+      // rAF stalled — restart
+      lastTimestamp = performance.now();
+      lastRenderWallTime = Date.now();
+      requestAnimationFrame(gameRender);
+    }
+  }, 1000);
+}
+
+function stopRafWatchdog() {
+  clearInterval(rafWatchdog);
+  rafWatchdog = null;
+}
+
 function gameRender(ts) {
   if (!state.gameRunning) return;
   try {
+  lastRenderWallTime = Date.now();
   const dt = Math.min((ts - lastTimestamp) / 1000, 0.05);
   lastTimestamp = ts;
 
@@ -1468,8 +1491,10 @@ function startExercise(ex) {
     countdownVal = 3;
     state.gameRunning = true;
     lastTimestamp = performance.now();
+    lastRenderWallTime = Date.now();
     gameStartTime = Date.now() + 3000;
     nextBeatTime = gameStartTime + 200;
+    startRafWatchdog();
     requestAnimationFrame(gameRender);
     clearInterval(schedulerTimer); schedulerTimer = null;
   });
@@ -1478,6 +1503,7 @@ function startExercise(ex) {
 // ── End game ───────────────────────────────────────────────
 function endGame() {
   stopMic();
+  stopRafWatchdog();
   const _calHide = document.getElementById('calibration-overlay'); if(_calHide) _calHide.classList.add('hidden');
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
@@ -1572,13 +1598,16 @@ document.getElementById('btn-resume').addEventListener('click', () => {
   canvas.style.pointerEvents = 'auto';
   showScreen('game');
   lastTimestamp = performance.now();
+  lastRenderWallTime = Date.now();
   requestAnimationFrame(gameRender);
   clearInterval(motionTimer);
   motionTimer = setInterval(captureMotionFrame, 200);
+  startRafWatchdog();
 });
 
 document.getElementById('btn-quit').addEventListener('click', () => {
   state.gameRunning = false;
+  stopRafWatchdog();
   clearInterval(schedulerTimer); schedulerTimer = null;
   clearInterval(countdownTimer); countdownTimer = null;
   clearInterval(motionTimer); motionTimer = null;
