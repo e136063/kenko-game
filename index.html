@@ -1720,6 +1720,7 @@ let motionDiffL = 0;       // left-half diff
 let motionDiffR = 0;       // right-half diff
 let motionDiffTop = 0;     // top-half diff
 let motionDiffBot = 0;     // bottom-half diff
+let motionDiffMouth = 0;   // mouth ROI diff — center x:25-75%, y:40-80%
 
 // tongue-lr alternating direction tracking
 let tongueLRLastDir = 0;    // -1=left, 1=right
@@ -1755,6 +1756,7 @@ let smoothDiff = 0;
 let smoothDiffBot = 0;
 let smoothDiffL = 0;
 let smoothDiffR = 0;
+let smoothDiffMouth = 0;
 
 function ensureMotionCanvas() {
   if (motionCanvas) return;
@@ -1794,7 +1796,16 @@ function captureMotionFrame() {
       return;
     }
 
-    let sumAll = 0, sumBot = 0, sumL = 0, sumR = 0;
+    // Mouth ROI bounds (x: 25%–75%, y: 40%–80%)
+    const mouthX0 = Math.floor(fw * 0.25);
+    const mouthX1 = Math.floor(fw * 0.75);
+    const mouthY0 = Math.floor(fh * 0.40);
+    const mouthY1 = Math.floor(fh * 0.80);
+    const mouthW  = mouthX1 - mouthX0;
+    const mouthH  = mouthY1 - mouthY0;
+    const mouthCnt = mouthW * mouthH;
+
+    let sumAll = 0, sumBot = 0, sumL = 0, sumR = 0, sumMouth = 0;
     let cnt = fw * fh;
 
     for (let py = 0; py < fh; py++) {
@@ -1807,37 +1818,41 @@ function captureMotionFrame() {
         if (py >= hh) sumBot += d;
         if (px < hw)  sumL   += d;
         else          sumR   += d;
+        if (px >= mouthX0 && px < mouthX1 && py >= mouthY0 && py < mouthY1) sumMouth += d;
       }
     }
 
-    const raw    = sumAll / cnt;
-    const rawBot = sumBot / (cnt / 2);
-    const rawL   = sumL   / (cnt / 2);
-    const rawR   = sumR   / (cnt / 2);
+    const raw      = sumAll   / cnt;
+    const rawBot   = sumBot   / (cnt / 2);
+    const rawL     = sumL     / (cnt / 2);
+    const rawR     = sumR     / (cnt / 2);
+    const rawMouth = mouthCnt > 0 ? sumMouth / mouthCnt : raw;
 
     const A = 0.35;
-    smoothDiff    = smoothDiff    * (1-A) + raw    * A;
-    smoothDiffBot = smoothDiffBot * (1-A) + rawBot * A;
-    smoothDiffL   = smoothDiffL   * (1-A) + rawL   * A;
-    smoothDiffR   = smoothDiffR   * (1-A) + rawR   * A;
+    smoothDiff      = smoothDiff      * (1-A) + raw      * A;
+    smoothDiffBot   = smoothDiffBot   * (1-A) + rawBot   * A;
+    smoothDiffL     = smoothDiffL     * (1-A) + rawL     * A;
+    smoothDiffR     = smoothDiffR     * (1-A) + rawR     * A;
+    smoothDiffMouth = smoothDiffMouth * (1-A) + rawMouth * A;
 
-    motionDiff    = smoothDiff;
-    motionDiffBot = smoothDiffBot;
-    motionDiffL   = smoothDiffL;
-    motionDiffR   = smoothDiffR;
+    motionDiff      = smoothDiff;
+    motionDiffBot   = smoothDiffBot;
+    motionDiffL     = smoothDiffL;
+    motionDiffR     = smoothDiffR;
+    motionDiffMouth = smoothDiffMouth;
 
     // Debug panel update
     const _dp = document.getElementById('debug-panel');
     if (_dp && _dp.style.display !== 'none') {
-      const _d = document.getElementById('dbg-diff');  if(_d) _d.textContent = motionDiff.toFixed(3);
+      const _d = document.getElementById('dbg-diff');  if(_d) _d.textContent = 'mth:'+motionDiffMouth.toFixed(3)+' all:'+motionDiff.toFixed(3);
       const _b = document.getElementById('dbg-bot');   if(_b) _b.textContent = motionDiffBot.toFixed(3);
       const _m = document.getElementById('dbg-mic');   if(_m) _m.textContent = micVolume.toFixed(3);
       const _p = document.getElementById('dbg-phase'); if(_p) {
         const _ex = state.exercise;
         if (!_ex) { _p.textContent = '-'; }
-        else if (_ex.id==='tongue-fb')  _p.textContent = 'ph:'+tongueFBPhase+' pk:'+tongueFBPeak.toFixed(3);
-        else if (_ex.id==='tongue-lr')  _p.textContent = 'ph:'+tongueLRPhase+' pk:'+tongueLRPeak.toFixed(3);
-        else if (_ex.id==='lip')        _p.textContent = 'ph:'+lipPhase+' pk:'+lipPeak.toFixed(3);
+        else if (_ex.id==='tongue-fb')  _p.textContent = 'ph:'+tongueFBPhase+' pk:'+tongueFBPeak.toFixed(3)+' ext:'+CAL_EXTEND.toFixed(3)+' rst:'+CAL_REST.toFixed(3);
+        else if (_ex.id==='tongue-lr')  _p.textContent = 'ph:'+tongueLRPhase+' pk:'+tongueLRPeak.toFixed(3)+' ext:'+CAL_EXTEND.toFixed(3);
+        else if (_ex.id==='lip')        _p.textContent = 'ph:'+lipPhase+' pk:'+lipPeak.toFixed(3)+' ext:'+CAL_EXTEND.toFixed(3);
         else if (_ex.id==='pa-ta-ka')   _p.textContent = 'win:'+(Date.now()<patakaBeatWindowEnd?'Y':'N')+' spk:'+(patakaMouthWasOpen?'Y':'N')+' vol:'+micVolume.toFixed(3);
       }
     }
@@ -1857,20 +1872,19 @@ function checkMotion(ex) {
   switch (ex.id) {
 
     case 'tongue-fb': {
-      // Complete action = tongue extends (motionDiff spike HIGH) then retracts (drops back LOW)
-      // Phase 0 → 1: wait for big extension spike
+      // Complete action = tongue extends (motionDiffMouth spike HIGH) then retracts (drops back LOW)
+      // Uses mouth ROI diff for precision — ignores background noise
       if (tongueFBPhase === 0) {
-        if (motionDiff > CAL_EXTEND) {    // clear tongue extension
+        if (motionDiffMouth > CAL_EXTEND) {
           tongueFBPhase = 1;
-          tongueFBPeak  = motionDiff;
+          tongueFBPeak  = motionDiffMouth;
         }
         return false;
       }
-      // Phase 1 → score: motion drops back to near-still = tongue retracted
       if (tongueFBPhase === 1) {
-        if (motionDiff > tongueFBPeak) tongueFBPeak = motionDiff;
-        if (motionDiff < CAL_REST) {       // back to rest
-          const scored = tongueFBPeak >= CAL_PEAK; // must have had a real peak
+        if (motionDiffMouth > tongueFBPeak) tongueFBPeak = motionDiffMouth;
+        if (motionDiffMouth < CAL_REST) {
+          const scored = tongueFBPeak >= CAL_PEAK;
           tongueFBPhase = 0;
           tongueFBPeak  = 0;
           return scored;
@@ -1880,18 +1894,17 @@ function checkMotion(ex) {
     }
 
     case 'tongue-lr': {
-      // Same two-phase as tongue-fb: extend (motionDiff spike) → retract (drop to rest) = score
-      // Asymmetry detection is unreliable on front camera; overall diff works better
+      // Same two-phase as tongue-fb — mouth ROI diff
       if (tongueLRPhase === 0) {
-        if (motionDiff > CAL_EXTEND) {
+        if (motionDiffMouth > CAL_EXTEND) {
           tongueLRPhase = 1;
-          tongueLRPeak  = motionDiff;
+          tongueLRPeak  = motionDiffMouth;
         }
         return false;
       }
       if (tongueLRPhase === 1) {
-        if (motionDiff > tongueLRPeak) tongueLRPeak = motionDiff;
-        if (motionDiff < CAL_REST) {
+        if (motionDiffMouth > tongueLRPeak) tongueLRPeak = motionDiffMouth;
+        if (motionDiffMouth < CAL_REST) {
           const scored = tongueLRPeak >= CAL_PEAK;
           tongueLRPhase = 0;
           tongueLRPeak  = 0;
@@ -1902,19 +1915,18 @@ function checkMotion(ex) {
     }
 
     case 'lip': {
-      // Complete action = mouth opens wide (bot spike) then closes back
-      // Require peak >= 0.030 to reject ambient noise
+      // Complete action = mouth opens wide (motionDiffMouth spike) then closes back
       if (lipPhase === 0) {
-        if (motionDiffBot > CAL_BOT_EXTEND) {
+        if (motionDiffMouth > CAL_EXTEND) {
           lipPhase = 1;
-          lipPeak  = motionDiffBot;
+          lipPeak  = motionDiffMouth;
         }
         return false;
       }
       if (lipPhase === 1) {
-        if (motionDiffBot > lipPeak) lipPeak = motionDiffBot;
-        if (motionDiffBot < CAL_BOT_REST) {
-          const scored = lipPeak >= CAL_BOT_PEAK; // must have had a real peak
+        if (motionDiffMouth > lipPeak) lipPeak = motionDiffMouth;
+        if (motionDiffMouth < CAL_REST) {
+          const scored = lipPeak >= CAL_PEAK;
           lipPhase = 0;
           lipPeak  = 0;
           return scored;
@@ -2014,33 +2026,31 @@ function startCalibration(onDone) {
   bar.style.width = '0%';
 
   let calTimer = setInterval(() => {
-    if (camActive && (motionDiff > 0 || calSamples.length > 0)) {
-      calSamples.push(motionDiff);
-      calBotSamples.push(motionDiffBot);
+    if (camActive && motionDiffMouth > 0) {
+      calSamples.push(motionDiffMouth);
     } else {
-      calSamples.push(0.010);
-      calBotSamples.push(0.010);
+      calSamples.push(0.008);
     }
     bar.style.width = Math.min(100, Math.round(calSamples.length / CAL_FRAMES * 100)) + '%';
 
     if (calSamples.length >= CAL_FRAMES) {
       clearInterval(calTimer);
 
-      const sortedDiff = [...calSamples].sort((a,b) => a-b);
-      const sortedBot  = [...calBotSamples].sort((a,b) => a-b);
-      const p90idx = Math.floor(sortedDiff.length * 0.9);
-      calNoiseFloor = Math.max(sortedDiff[p90idx], 0.008);
-      calBotFloor   = Math.max(sortedBot[p90idx],  0.008);
+      const sorted = [...calSamples].sort((a,b) => a-b);
+      const p90idx = Math.floor(sorted.length * 0.9);
+      calNoiseFloor = Math.max(sorted[p90idx], 0.006);
 
-      // extend = noise × 1.6, capped at 0.028
-      CAL_EXTEND     = Math.min(Math.max(calNoiseFloor * 1.6, 0.013), 0.028);
-      // rest = noise × 1.3, capped at 0.025
-      CAL_REST       = Math.min(Math.max(calNoiseFloor * 1.3, 0.011), 0.025);
-      // peak = noise × 2.5, capped at 0.040
-      CAL_PEAK       = Math.min(Math.max(calNoiseFloor * 2.5, 0.018), 0.040);
-      CAL_BOT_EXTEND = Math.min(Math.max(calBotFloor   * 1.6, 0.015), 0.028);
-      CAL_BOT_REST   = Math.min(Math.max(calBotFloor   * 1.3, 0.010), 0.020);
-      CAL_BOT_PEAK   = Math.min(Math.max(calBotFloor   * 2.5, 0.020), 0.040);
+      // All exercises now use mouth ROI thresholds
+      // extend = noise × 1.8, min 0.012, max 0.030
+      CAL_EXTEND     = Math.min(Math.max(calNoiseFloor * 1.8, 0.012), 0.030);
+      // rest   = noise × 1.3, min 0.009, max 0.022
+      CAL_REST       = Math.min(Math.max(calNoiseFloor * 1.3, 0.009), 0.022);
+      // peak   = noise × 3.0, min 0.018, max 0.045
+      CAL_PEAK       = Math.min(Math.max(calNoiseFloor * 3.0, 0.018), 0.045);
+      // Bot thresholds kept for compatibility but not used in FSM
+      CAL_BOT_EXTEND = CAL_EXTEND;
+      CAL_BOT_REST   = CAL_REST;
+      CAL_BOT_PEAK   = CAL_PEAK;
 
       overlay.classList.add('hidden');
       onDone();
