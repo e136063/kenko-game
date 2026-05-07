@@ -1770,7 +1770,7 @@ let lipPhase = 0;           // 0=idle, 1=opened
 let lipPeak  = 0;           // peak bot value in phase 1
 let lipPhaseStart = 0;
 
-const PHASE_MIN_MS = 40; // must hold phase 1 for at least 40ms to be a real action
+const PHASE_MIN_MS = 30; // must hold phase 1 for at least 30ms to be a real action
 
 // pa-ta-ka: open/close cycle
 let patakaMouthWasOpen = false;
@@ -1862,7 +1862,7 @@ function captureMotionFrame() {
     const rawR     = sumR     / (cnt / 2);
     const rawMouth = mouthCnt > 0 ? sumMouth / mouthCnt : raw;
 
-    const A = 0.70;
+    const A = 0.85;
     smoothDiff      = smoothDiff      * (1-A) + raw      * A;
     smoothDiffBot   = smoothDiffBot   * (1-A) + rawBot   * A;
     smoothDiffL     = smoothDiffL     * (1-A) + rawL     * A;
@@ -2070,12 +2070,12 @@ function startCalibration(onDone) {
 
       // All exercises now use mouth ROI thresholds
       // Low SNR environment: keep multipliers tight so signal at 1.6x noise still scores
-      // extend = noise × 1.15 (entry trigger — just needs to be above noise)
-      CAL_EXTEND     = Math.min(Math.max(calNoiseFloor * 1.15, 0.009), 0.022);
-      // rest   = noise × 1.1 (return to near-still)
-      CAL_REST       = Math.min(Math.max(calNoiseFloor * 1.1, 0.008), 0.020);
-      // peak   = noise × 1.25 (must reach at least 1.25× noise — real motion bar)
-      CAL_PEAK       = Math.min(Math.max(calNoiseFloor * 1.25, 0.012), 0.026);
+      // extend = noise × 1.05 (entry trigger — just above noise floor)
+      CAL_EXTEND     = Math.min(Math.max(calNoiseFloor * 1.05, 0.008), 0.018);
+      // rest   = noise × 1.0 (return to near-still)
+      CAL_REST       = Math.min(Math.max(calNoiseFloor * 1.0, 0.007), 0.016);
+      // peak   = noise × 1.15 (must reach at least 1.15× noise — real motion bar)
+      CAL_PEAK       = Math.min(Math.max(calNoiseFloor * 1.15, 0.010), 0.022);
       // Bot thresholds kept for compatibility but not used in FSM
       CAL_BOT_EXTEND = CAL_EXTEND;
       CAL_BOT_REST   = CAL_REST;
