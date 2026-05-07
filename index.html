@@ -444,12 +444,7 @@
     </div>
     <button id="btn-pause">⏸</button>
   </div>
-  <!-- Debug panel: outside #hud to avoid flex/overflow clipping -->
-  <div id="debug-panel" style="position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.80);color:#0f0;font-size:11px;padding:6px 14px;border-radius:8px;text-align:center;pointer-events:none;font-family:monospace;z-index:9999;min-width:240px;display:none;white-space:nowrap;">
-    <span id="dbg-diff">mth:0 all:0</span><br>
-    <span id="dbg-phase">-</span><br>
-    mic:<span id="dbg-mic">0</span> bot:<span id="dbg-bot">0</span>
-  </div>
+
 
   <!-- Calibration overlay -->
   <div id="calibration-overlay" class="hidden">
@@ -1451,7 +1446,6 @@ function startExercise(ex) {
   updateHUD();
 
   showScreen('game');
-  const _dpShow = document.getElementById('debug-panel'); if(_dpShow) _dpShow.style.display='block';
   // Camera should already be active (started at title screen)
   // If not yet active, try again now
   if (!camActive && !camAsked) {
@@ -1484,7 +1478,6 @@ function startExercise(ex) {
 // ── End game ───────────────────────────────────────────────
 function endGame() {
   stopMic();
-  const _dpHide = document.getElementById('debug-panel'); if(_dpHide) _dpHide.style.display='none';
   const _calHide = document.getElementById('calibration-overlay'); if(_calHide) _calHide.classList.add('hidden');
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
@@ -1853,24 +1846,6 @@ function captureMotionFrame() {
     motionDiffR     = smoothDiffR;
     motionDiffMouth = smoothDiffMouth;
 
-    // Debug panel update
-    const _dp = document.getElementById('debug-panel');
-    if (_dp && _dp.style.display !== 'none') {
-      const _d = document.getElementById('dbg-diff');  if(_d) _d.textContent = 'mth:'+motionDiffMouth.toFixed(3)+' all:'+motionDiff.toFixed(3);
-      const _b = document.getElementById('dbg-bot');   if(_b) _b.textContent = motionDiffBot.toFixed(3);
-      const _m = document.getElementById('dbg-mic');   if(_m) _m.textContent = micVolume.toFixed(3);
-      const _p = document.getElementById('dbg-phase'); if(_p) {
-        const _ex = state.exercise;
-        if (!_ex) { _p.textContent = '-'; }
-        else if (_ex.id==='tongue-fb')  _p.textContent = 'ph:'+tongueFBPhase+(tongueFBPhase===1?' hold:'+(Date.now()-tongueFBPhaseStart)+'ms':'')+' pk:'+tongueFBPeak.toFixed(3)+'\next:'+CAL_EXTEND.toFixed(3)+' rst:'+CAL_REST.toFixed(3)+' pk≥:'+CAL_PEAK.toFixed(3);
-        else if (_ex.id==='tongue-lr')  _p.textContent = 'ph:'+tongueLRPhase+(tongueLRPhase===1?' hold:'+(Date.now()-tongueLRPhaseStart)+'ms':'')+' pk:'+tongueLRPeak.toFixed(3)+'\next:'+CAL_EXTEND.toFixed(3)+' rst:'+CAL_REST.toFixed(3)+' pk≥:'+CAL_PEAK.toFixed(3);
-        else if (_ex.id==='lip')        _p.textContent = 'ph:'+lipPhase+(lipPhase===1?' hold:'+(Date.now()-lipPhaseStart)+'ms':'')+' pk:'+lipPeak.toFixed(3)+'\next:'+CAL_EXTEND.toFixed(3)+' rst:'+CAL_REST.toFixed(3)+' pk≥:'+CAL_PEAK.toFixed(3);
-        else if (_ex.id==='pa-ta-ka') {
-          const _syllables = ['啊','他','卡'];
-          _p.textContent = _syllables[patakaCurrPhase]||'-'+' win:'+(Date.now()<patakaBeatWindowEnd?'Y':'N')+' spk:'+(patakaMouthWasOpen?'Y':'N')+'\nvol:'+micVolume.toFixed(3)+' thr:'+MIC_THRESHOLD.toFixed(2);
-        }
-      }
-    }
 
     prevFrame.set(curr);
   } catch(e) {
