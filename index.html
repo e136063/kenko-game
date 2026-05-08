@@ -515,6 +515,9 @@
   </div>
 
 
+  <!-- Debug panel -->
+  <div id="dbg" style="position:fixed;bottom:10px;left:8px;z-index:99;background:rgba(0,0,0,0.72);color:#0f0;font:11px/1.5 monospace;padding:8px 10px;border-radius:10px;pointer-events:none;"></div>
+
   <!-- Calibration overlay -->
   <!-- Permission Error Overlay -->
   <div id="permission-overlay" class="hidden">
@@ -2057,6 +2060,18 @@ function captureMotionFrame() {
     motionDiffR     = smoothDiffR;
     motionDiffMouth = smoothDiffMouth;
 
+    // Debug panel update
+    const _dbg = document.getElementById('dbg');
+    if (_dbg && state.gameRunning) {
+      const _ph = state.exercise?.id === 'tongue-fb' ? tongueFBPhase
+                : state.exercise?.id === 'tongue-lr' ? tongueLRPhase
+                : state.exercise?.id === 'lip'       ? lipPhase : '-';
+      _dbg.textContent =
+        `mth: ${motionDiffMouth.toFixed(4)}\n` +
+        `EXT: ${(CAL_EXTEND||0).toFixed(4)}  RST: ${(CAL_REST||0).toFixed(4)}\n` +
+        `PKT: ${(CAL_PEAK||0).toFixed(4)}  phase: ${_ph}\n` +
+        `score: ${Math.floor(state.score)}`;
+    }
 
     prevFrame.set(curr);
   } catch(e) {
