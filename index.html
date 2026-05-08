@@ -2291,20 +2291,21 @@ function startCalibration(onDone) {
 
       const sorted = [...calSamples].sort((a,b) => a-b);
       const p90idx = Math.floor(sorted.length * 0.9);
+      // Use 90th percentile as noise floor — no artificial cap, adapts to real environment
       calNoiseFloor = Math.max(sorted[p90idx], 0.006);
 
-      // All exercises now use mouth ROI thresholds
-      // Low SNR environment: keep multipliers tight so signal at 1.6x noise still scores
-      // extend = noise × 1.05 (entry trigger — just above noise floor)
-      CAL_EXTEND     = Math.min(Math.max(calNoiseFloor * 1.05, 0.008), 0.018);
-      // rest = noise × 0.80 (must drop BELOW noise floor to confirm return to still)
-      CAL_REST       = Math.min(Math.max(calNoiseFloor * 0.80, 0.006), 0.014);
-      // peak   = noise × 1.15 (must reach at least 1.15× noise — real motion bar)
-      CAL_PEAK       = Math.min(Math.max(calNoiseFloor * 1.15, 0.010), 0.022);
-      // Bot thresholds kept for compatibility but not used in FSM
+      // EXT: just above noise floor — entry trigger
+      CAL_EXTEND = calNoiseFloor * 1.10;
+      // RST: well below noise floor — must clearly return to still to confirm action done
+      CAL_REST   = calNoiseFloor * 0.60;
+      // PKT: must reach 1.5× noise — confirms real motion, not background drift
+      CAL_PEAK   = calNoiseFloor * 1.50;
+
       CAL_BOT_EXTEND = CAL_EXTEND;
       CAL_BOT_REST   = CAL_REST;
       CAL_BOT_PEAK   = CAL_PEAK;
+
+      console.log(`[CAL] floor=${calNoiseFloor.toFixed(4)} EXT=${CAL_EXTEND.toFixed(4)} RST=${CAL_REST.toFixed(4)} PKT=${CAL_PEAK.toFixed(4)}`);
 
       overlay.classList.add('hidden');
       onDone();
