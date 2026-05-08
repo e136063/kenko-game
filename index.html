@@ -368,6 +368,75 @@
   #calibration-bar-wrap { width: 220px; height: 8px; background: #eee; border-radius: 99px; overflow: hidden; }
   #calibration-bar { height: 100%; width: 0%; background: var(--color-primary); border-radius: 99px; transition: width 0.18s linear; }
 
+  /* ── Permission Error Overlay ── */
+  #permission-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.72);
+    padding: 24px;
+  }
+  #permission-overlay.hidden { display: none; }
+  #permission-box {
+    background: #fff;
+    border-radius: 20px;
+    padding: 28px 24px;
+    text-align: center;
+    max-width: 320px;
+    width: 100%;
+  }
+  #permission-box .perm-icon { font-size: 2.8rem; margin-bottom: 10px; }
+  #permission-box .perm-title { font-size: 1.1rem; font-weight: 700; color: #333; margin-bottom: 8px; }
+  #permission-box .perm-body { font-size: 0.88rem; color: #555; line-height: 1.6; margin-bottom: 16px; }
+  #permission-box .perm-steps { text-align: left; font-size: 0.84rem; color: #444; line-height: 1.9; margin-bottom: 18px; background: #f7f7f7; border-radius: 10px; padding: 12px 16px; }
+  #permission-box .btn-perm-retry { display: block; width: 100%; padding: 13px; background: var(--color-primary); color: #fff; border: none; border-radius: 14px; font-size: 1rem; font-weight: 700; cursor: pointer; margin-bottom: 10px; }
+  #permission-box .btn-perm-skip { display: block; width: 100%; padding: 11px; background: transparent; color: #888; border: 1.5px solid #ddd; border-radius: 14px; font-size: 0.9rem; cursor: pointer; }
+
+  /* ── Fallback tap zone ── */
+  #fallback-tap-btn {
+    position: fixed;
+    bottom: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 12;
+    background: var(--color-primary);
+    color: #fff;
+    border: none;
+    border-radius: 99px;
+    padding: 18px 48px;
+    font-size: 1.15rem;
+    font-weight: 700;
+    box-shadow: 0 4px 18px rgba(232,98,42,0.35);
+    display: none;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  #fallback-tap-btn.active { display: block; animation: tapPulse 0.8s ease-out; }
+  @keyframes tapPulse {
+    0%   { transform: translateX(-50%) scale(1.18); box-shadow: 0 0 0 8px rgba(232,98,42,0.25); }
+    100% { transform: translateX(-50%) scale(1); box-shadow: 0 4px 18px rgba(232,98,42,0.35); }
+  }
+
+  /* ── No-camera banner ── */
+  #no-camera-banner {
+    position: fixed;
+    top: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 11;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    font-size: 0.78rem;
+    padding: 6px 16px;
+    border-radius: 99px;
+    display: none;
+    white-space: nowrap;
+  }
+
   /* ── Pause overlay ── */
   #screen-pause {
     background: rgba(0,0,0,0.55);
@@ -447,6 +516,24 @@
 
 
   <!-- Calibration overlay -->
+  <!-- Permission Error Overlay -->
+  <div id="permission-overlay" class="hidden">
+    <div id="permission-box">
+      <div class="perm-icon" id="perm-icon">📷</div>
+      <div class="perm-title" id="perm-title">需要相機權限</div>
+      <div class="perm-body" id="perm-body">動作偵測需要使用相機，請允許後再繼續。</div>
+      <div class="perm-steps" id="perm-steps"></div>
+      <button class="btn-perm-retry" id="btn-perm-retry">重新嘗試</button>
+      <button class="btn-perm-skip" id="btn-perm-skip">繼續（不使用偵測）</button>
+    </div>
+  </div>
+
+  <!-- Fallback tap button (shown when camera/mic unavailable) -->
+  <button id="fallback-tap-btn">👆 我做到了！</button>
+
+  <!-- No-camera banner -->
+  <div id="no-camera-banner">📵 無相機 — 請按按鈕得分</div>
+
   <div id="calibration-overlay" class="hidden">
     <div id="calibration-box">
       <div class="cal-icon">🎯</div>
@@ -1113,6 +1200,9 @@ function gameRender(ts) {
         // Store which syllable this beat is so we can show it
         patakaCurrPhase = ev.phase; // 0=啊,1=他,2=卡
       }
+      // Fallback tap window: open whenever camera or mic is unavailable
+      const _beatMs = state.exercise ? Math.round(60000 / state.exercise.bpm) : 1000;
+      showFallbackWindow(Math.min(_beatMs - 100, 800));
       i++;
     }
     if (i > 0) beatEventQueue.splice(0, i);
@@ -1390,7 +1480,6 @@ function schedulerTick() {
 function onTap(x, y) {
   if (!state.gameRunning || state.paused || showingCountdown) return;
   ensureAudio();
-  // Ripple visual only — tap no longer scores points
   addRipple(x, y, state.exercise.color);
 }
 
@@ -1504,6 +1593,8 @@ function startExercise(ex) {
 function endGame() {
   stopMic();
   stopRafWatchdog();
+  fallbackTapBtn.className = '';
+  fallbackWindowOpen = false;
   const _calHide = document.getElementById('calibration-overlay'); if(_calHide) _calHide.classList.add('hidden');
   state.gameRunning = false;
   clearInterval(schedulerTimer); schedulerTimer = null;
@@ -1673,9 +1764,11 @@ async function startCamera() {
     });
     await camVideo.play().catch(() => {});
     camActive = true;
+    document.getElementById('no-camera-banner').style.display = 'none';
   } catch (err) {
     console.warn('Camera unavailable:', err);
     camActive = false;
+    showPermissionError('camera', err);
   }
 }
 
@@ -1693,6 +1786,95 @@ async function startMic() {
     micActive = true;
   } catch(e) {
     console.warn('Mic unavailable:', e);
+    micActive = false;
+    showPermissionError('mic', e);
+  }
+}
+
+// ── Permission error handling ───────────────────────────────
+function getPermissionSteps(type, err) {
+  const isNotFound    = err && (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError');
+  const isNotAllowed  = err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError');
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+  if (isNotFound) {
+    return type === 'camera'
+      ? '此裝置未偵測到相機硬體。\n改用「按按鈕得分」模式繼續。'
+      : '此裝置未偵測到麥克風硬體。\n改用「按按鈕得分」模式繼續。';
+  }
+  if (isNotAllowed) {
+    if (isIOS && isSafari) {
+      return type === 'camera'
+        ? '請依以下步驟開啟相機：\n1. 點「設定」App\n2. 點「Safari」\n3. 點「相機」→ 選「允許」\n4. 回到遊戲重新整理'
+        : '請依以下步驟開啟麥克風：\n1. 點「設定」App\n2. 點「Safari」\n3. 點「麥克風」→ 選「允許」\n4. 回到遊戲重新整理';
+    }
+    if (isIOS) {
+      return type === 'camera'
+        ? '請依以下步驟開啟相機：\n1. 點「設定」App\n2. 找到此瀏覽器\n3. 開啟「相機」權限\n4. 回到遊戲重新整理'
+        : '請依以下步驟開啟麥克風：\n1. 點「設定」App\n2. 找到此瀏覽器\n3. 開啟「麥克風」權限\n4. 回到遊戲重新整理';
+    }
+    return type === 'camera'
+      ? '請依以下步驟開啟相機：\n1. 點網址列左邊的 🔒 或 📷 圖示\n2. 將「相機」設為「允許」\n3. 重新整理頁面'
+      : '請依以下步驟開啟麥克風：\n1. 點網址列左邊的 🔒 或 🎙 圖示\n2. 將「麥克風」設為「允許」\n3. 重新整理頁面';
+  }
+  return type === 'camera'
+    ? '相機無法使用，改用「按按鈕得分」模式繼續。'
+    : '麥克風無法使用，改用「按按鈕得分」模式繼續。';
+}
+
+let _permPendingType = null;
+
+function showPermissionError(type, err) {
+  const isNotFound   = err && (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError');
+  const isNotAllowed = err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError');
+
+  // If hardware simply not found — silently activate fallback, no popup
+  if (isNotFound) {
+    activateFallbackMode(type);
+    return;
+  }
+
+  _permPendingType = type;
+  const overlay = document.getElementById('permission-overlay');
+  document.getElementById('perm-icon').textContent  = type === 'camera' ? '📷' : '🎙️';
+  document.getElementById('perm-title').textContent = type === 'camera' ? '需要相機權限' : '需要麥克風權限';
+  document.getElementById('perm-body').textContent  = type === 'camera'
+    ? '動作偵測需要相機，請允許後再試。\n或點「繼續」改用按鈕得分。'
+    : '發音偵測需要麥克風，請允許後再試。\n或點「繼續」改用按鈕得分。';
+  const steps = getPermissionSteps(type, err);
+  const stepsEl = document.getElementById('perm-steps');
+  // Only show steps if permission denied (not other errors)
+  if (isNotAllowed) {
+    stepsEl.style.display = 'block';
+    stepsEl.textContent = steps;
+  } else {
+    stepsEl.style.display = 'none';
+  }
+  overlay.classList.remove('hidden');
+}
+
+document.getElementById('btn-perm-retry').addEventListener('click', async () => {
+  document.getElementById('permission-overlay').classList.add('hidden');
+  if (_permPendingType === 'camera') {
+    camAsked = false;
+    camActive = false;
+    await startCamera();
+  } else {
+    await startMic();
+  }
+});
+
+document.getElementById('btn-perm-skip').addEventListener('click', () => {
+  document.getElementById('permission-overlay').classList.add('hidden');
+  activateFallbackMode(_permPendingType);
+});
+
+function activateFallbackMode(type) {
+  if (type === 'camera') {
+    camActive = false;
+    document.getElementById('no-camera-banner').style.display = 'block';
+  } else {
     micActive = false;
   }
 }
@@ -1967,6 +2149,34 @@ function checkMotion(ex) {
       return motionDiff > 0.020;
   }
 }
+
+// ── Fallback tap button logic ─────────────────────────────────────
+const fallbackTapBtn = document.getElementById('fallback-tap-btn');
+let fallbackWindowOpen = false;
+let fallbackScored = false;
+
+function showFallbackWindow(durationMs) {
+  if (camActive && state.exercise && state.exercise.id !== 'pa-ta-ka') return; // camera fine, no need
+  if (micActive && state.exercise && state.exercise.id === 'pa-ta-ka') return; // mic fine, no need
+  if (!state.gameRunning || state.paused) return;
+  fallbackWindowOpen = true;
+  fallbackScored = false;
+  fallbackTapBtn.className = 'active';
+  setTimeout(() => {
+    fallbackWindowOpen = false;
+    fallbackTapBtn.className = '';
+  }, durationMs);
+}
+
+fallbackTapBtn.addEventListener('click', () => {
+  if (!fallbackWindowOpen || fallbackScored || !state.gameRunning || state.paused) return;
+  fallbackScored = true;
+  fallbackTapBtn.className = '';
+  state.score += 5;
+  updateHUD();
+  addRipple(window.innerWidth / 2, window.innerHeight * 0.7, state.exercise ? state.exercise.color : '#FF6B35');
+});
+fallbackTapBtn.addEventListener('touchend', e => { e.preventDefault(); fallbackTapBtn.click(); });
 
 // Called from gameRender to score motion (camera-based, not for pa-ta-ka)
 function scoreMotionIfDetected() {
